@@ -193,7 +193,7 @@ server <- function(input, output) {
     }
     if (input$case_death == 'death' && input$daily_tot == 'daily' && input$absolute_scaled == 'scaled')
     {
-      plot_dat <- us_clean %>% mutate(outcome = (daily_death / daily_total_pop) * 100000)  %>%
+      plot_dat <- us_clean %>% mutate(outcome = (daily_death / total_pop) * 100000)  %>%
         mutate(test_outcome = (daily_total / total_pop) * 100000) %>%
         mutate(test_frac_outcome = ((daily_positive/(daily_total)) / total_pop) * 100000)
       y_labels <- c("Daily Fatality Count", "Daily Number of Tests", "Daily Positive Test Proportion")
