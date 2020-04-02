@@ -214,6 +214,7 @@ server <- function(input, output) {
   #make the testing plots 
   output$testing_plot <- renderPlotly({
     scaleparam <- "fixed"
+    tool_tip <- get_plot_data()[[3]]
     p2 <- get_plot_data()[[1]] %>% 
       #Filter data for cases >0 and selected states
       filter(test_outcome > 0) %>% 
@@ -234,6 +235,7 @@ server <- function(input, output) {
   #make the fraction positive testing plots 
   output$testing_frac_plot <- renderPlotly({
     scaleparam <- "fixed"
+    tool_tip <- get_plot_data()[[3]]
     p3 <- get_plot_data()[[1]] %>% 
       #Filter data for cases >0 and selected states
       filter(test_frac_outcome > 0) %>% 
