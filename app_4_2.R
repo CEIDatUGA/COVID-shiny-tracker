@@ -25,7 +25,7 @@ if (file.exists('cleandata.RDS') && as.Date(file.mtime('cleandata.RDS')) ==  Sys
   #################################
   # load already clean data locally
   #################################
-  us_data <- readRDS('cleandata.RDS')
+  us_clean <- readRDS('cleandata.RDS')
 } else {
   #################################
   # pull data from Covidtracking and process
@@ -35,11 +35,12 @@ if (file.exists('cleandata.RDS') && as.Date(file.mtime('cleandata.RDS')) ==  Sys
   us_clean <- us_data %>% dplyr::select(c(date,state,positive,negative,total,hospitalized,death)) %>%
     mutate(date = as.Date(as.character(date),format="%Y%m%d")) %>% 
     group_by(state) %>% arrange(date) %>%
-    mutate(all_positive = cumsum(positive)) %>% 
-    mutate(all_negative = cumsum(negative)) %>% 
-    mutate(all_total = cumsum(total)) %>% 
-    mutate(all_hospitalized = cumsum(hospitalized)) %>% 
-    mutate(all_death = cumsum(death))  
+    mutate(daily_positive = c(0,diff(positive))) %>% 
+    mutate(daily_negative = c(0,diff(negative))) %>% 
+    mutate(daily_total = c(0,diff(total))) %>% 
+    mutate(daily_hospitalized = c(0,diff(hospitalized))) %>% 
+    mutate(daily_death = c(0,diff(death)))
+
     saveRDS(us_clean,'cleandata.RDS')
 }
 
@@ -56,10 +57,15 @@ state_var = unique(us_clean$state)
 
 # Define UI
 ui <- fluidPage(theme = shinytheme("lumen"),
-                titlePanel("COVID-19"),
+                includeCSS("appstyle.css"),
+                withMathJax(),
+                tags$div(id = "shinyheadertitle", "YACT - Yet Another COVID-19 Tracker"), #the style 'shinyheadertitle' is defined in the appstyle.css file
+                tags$div(id = "infotext", "This is tracker is brought to you by the", a("College of Public Health", href="https://publichealth.uga.edu", target="_blank"), "and the", a("Center for the Ecology of Infectious Diseases", href="https://ceid.uga.edu", target="_blank"), "at the University of Georgia."),
+                p('Please provide any feedback and feature requests through Github Issues.', class='maintext'),
+                navbarPage(title = "YACT", id = 'alltabs', selected = "us",
+              tabPanel(title = "US", value = "us",
                 sidebarLayout(
                   sidebarPanel(
-                    withMathJax(),
                     #State selector coding with Cali Wash and GA as awlays selected for a defult setting, will flash an error with none selected
                     #Picker input = drop down bar
                     shinyWidgets::pickerInput("state_selector", "Select States", state_var, multiple = TRUE, 
@@ -76,7 +82,7 @@ ui <- fluidPage(theme = shinytheme("lumen"),
                     sliderInput(inputId = "count_limit", "Choose the number of cases at which to start graphs", min = 1, max = 500, value = 100),
                     shiny::selectInput("yscale", "Y-scale",c("linear" = "linear", "logarithmic" = "logarithmic"), selected = "logarithmic"),
                     br(), br()
-                  ),
+                  ), #end sidebar panel
                   
                   # Output:
                   mainPanel(
@@ -86,9 +92,54 @@ ui <- fluidPage(theme = shinytheme("lumen"),
                     plotlyOutput(outputId = "testing_plot", height = "300px"),
                     #change to plotOutput if using static ggplot object
                     plotlyOutput(outputId = "testing_frac_plot", height = "300px")
-                  )
+                  ) #end main panel
                 )
-)
+              ), #close US tab
+              
+              
+              tabPanel("World",  value = "world",
+                       sidebarLayout(
+                         sidebarPanel(
+                           #State selector coding with Cali Wash and GA as awlays selected for a defult setting, will flash an error with none selected
+                           #Picker input = drop down bar
+                           shinyWidgets::pickerInput("state_selector", "Select States", state_var, multiple = TRUE, 
+                                                     options = list(`actions-box` = TRUE),
+                                                     selected = c("CA","WA", "GA")),
+                           #Shiny selectors below major picker input
+                           shiny::selectInput("case_death", "Outcome",c("Cases" = "case", "Deaths" = "death"), selected = "Cases"),
+                           shiny::selectInput("daily_tot", "Daily Count or Cumulative Total Count",c("Daily" = "daily", "Total" = "tot"), selected ="Total"),
+                           
+                           shiny::selectInput("absolute_scaled", "Absolute or scaled values",c("Absolute number" = "actual", "Per 100K" = "scaled")),
+                           
+                           # It would be nice if we could get the X Cases to auto-change to match the selector below
+                           shiny::selectInput("xscale", "Set x-axis to calendar date or days since a set number of cases",c("Calendar Date" = "x_time", "Days Since X Cases" = "x_count")),
+                           sliderInput(inputId = "count_limit", "Choose the number of cases at which to start graphs", min = 1, max = 500, value = 100),
+                           shiny::selectInput("yscale", "Y-scale",c("linear" = "linear", "logarithmic" = "logarithmic"), selected = "logarithmic"),
+                           br(), br()
+                         ),
+                         
+                         # Output:
+                         mainPanel(
+                           #change to plotOutput if using static ggplot object
+                           plotlyOutput(outputId = "case_death_plot_world", height = "300px"),
+                     
+                         )
+                       )
+                      
+              ) #close "World" tab
+         
+            ), #close NavBarPage
+              tagList( hr(),
+                       p('All text and figures are licensed under a ',
+                         a("Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.", href="http://creativecommons.org/licenses/by-nc-sa/4.0/", target="_blank"),
+                         'Software/Code is licensed under ',
+                         a("GPL-3.", href="https://www.gnu.org/licenses/gpl-3.0.en.html" , target="_blank")
+                         ,
+                         align = "center", style="font-size:small") #end paragraph
+              )
+) #end fluidpage
+                
+  
 
 # Define server function
 server <- function(input, output) {
@@ -99,34 +150,34 @@ server <- function(input, output) {
     #choose either cases or deaths to plot
     if (input$case_death == 'case' && input$daily_tot == 'daily' && input$absolute_scaled == 'actual')
     {
-      plot_dat <- us_clean %>% mutate(outcome = positive) %>%  
-                            mutate(test_outcome = total) %>%
-                            mutate(test_frac_outcome = positive/(total+1)) #add 1 to prevent divide by 0
+      plot_dat <- us_clean %>% mutate(outcome = daily_positive) %>%  
+                            mutate(test_outcome = daily_total) %>%
+                            mutate(test_frac_outcome = daily_positive/(daily_total)) #add 1 to prevent divide by 0
       y_labels <- c("Daily New Case Count", "Daily Number of Tests", "Daily Positive Test Proportion")
       tool_tip <- c("Date", "Cases", "Tests", "Positive Test Proportion")
     }
     if (input$case_death == 'death' && input$daily_tot == 'daily' && input$absolute_scaled == 'actual')
     {
-      plot_dat <- us_clean %>% mutate(outcome = death)  %>%
-                           mutate(test_outcome = total) %>%
-                          mutate(test_frac_outcome = positive/(total+1))
+      plot_dat <- us_clean %>% mutate(outcome = daily_death)  %>%
+                           mutate(test_outcome = daily_total) %>%
+                          mutate(test_frac_outcome = daily_positive/(daily_total))
       y_labels <- c("Daily Fatality Count", "Daily Number of Tests", "Daily Positive Test Proportion")
       tool_tip <- c("Date","Fatalities", "Tests", "Positive Test Proportion")
     }
     if (input$case_death == 'case' && input$daily_tot == 'tot' && input$absolute_scaled == 'actual')
     {
-      plot_dat <- us_clean %>% mutate(outcome = all_positive) %>%  
-                            mutate(test_outcome = all_total)%>%
-                            mutate(test_frac_outcome = all_positive/(all_total+1))
+      plot_dat <- us_clean %>% mutate(outcome = positive) %>%  
+                            mutate(test_outcome = total)%>%
+                            mutate(test_frac_outcome = positive/(total))
       y_labels <- c("Cumulative Case Count", "Cumulative Test Count", "Cumulative Positive Test Proportion")
       tool_tip <- c("Date","Cases", "Tests", "Positive Test Proportion")
       
     }
     if (input$case_death == 'death' && input$daily_tot == 'tot' && input$absolute_scaled == 'actual')
     {
-      plot_dat <- us_clean %>% mutate(outcome = all_death) %>% 
-                            mutate(test_outcome = all_total) %>%
-                            mutate(test_frac_outcome = all_positive/(all_total+1))
+      plot_dat <- us_clean %>% mutate(outcome = death) %>% 
+                            mutate(test_outcome = total) %>%
+                            mutate(test_frac_outcome = positive/(total))
       y_labels <- c("Cumulative Fatality Count", "Cumulative Test Count", "Cumulative Positive Test Proportion")
       tool_tip <- c("Date","Fatalities", "Tests", "Positive Test Proportion")
     }
@@ -134,34 +185,34 @@ server <- function(input, output) {
     #choose either cases or deaths to plot for 100k
     if (input$case_death == 'case' && input$daily_tot == 'daily' && input$absolute_scaled == 'scaled')
     {
-      plot_dat <- us_clean %>% mutate(outcome = (positive / total_pop) * 100000) %>%  
-        mutate(test_outcome = (total / total_pop) * 100000) %>%
-        mutate(test_frac_outcome = ((positive/(total+1)) / total_pop) * 100000) #add 1 to prevent divide by 0
+      plot_dat <- us_clean %>% mutate(outcome = (daily_positive / total_pop) * 100000) %>%  
+        mutate(test_outcome = (daily_total / total_pop) * 100000) %>%
+        mutate(test_frac_outcome = ((daily_positive/(daily_total)) / total_pop) * 100000) #add 1 to prevent divide by 0
       y_labels <- c("Daily New Case Count", "Daily Number of Tests", "Daily Positive Test Proportion")
       tool_tip <- c("Date", "Cases", "Tests", "Positive Test Proportion")
     }
     if (input$case_death == 'death' && input$daily_tot == 'daily' && input$absolute_scaled == 'scaled')
     {
-      plot_dat <- us_clean %>% mutate(outcome = (death / total_pop) * 100000)  %>%
-        mutate(test_outcome = (total / total_pop) * 100000) %>%
-        mutate(test_frac_outcome = ((positive/(total+1)) / total_pop) * 100000)
+      plot_dat <- us_clean %>% mutate(outcome = (daily_death / daily_total_pop) * 100000)  %>%
+        mutate(test_outcome = (daily_total / total_pop) * 100000) %>%
+        mutate(test_frac_outcome = ((daily_positive/(daily_total)) / total_pop) * 100000)
       y_labels <- c("Daily Fatality Count", "Daily Number of Tests", "Daily Positive Test Proportion")
       tool_tip <- c("Date","Fatalities", "Tests", "Positive Test Proportion")
     }
     if (input$case_death == 'case' && input$daily_tot == 'tot' && input$absolute_scaled == 'scaled')
     {
-      plot_dat <- us_clean %>% mutate(outcome = (all_positive / total_pop) * 100000) %>%  
-        mutate(test_outcome = (all_total / total_pop) * 100000) %>%
-        mutate(test_frac_outcome = ((all_positive/(all_total+1)) / total_pop) * 100000)
+      plot_dat <- us_clean %>% mutate(outcome = (positive / total_pop) * 100000) %>%  
+        mutate(test_outcome = (total / total_pop) * 100000) %>%
+        mutate(test_frac_outcome = ((positive/(total)) / total_pop) * 100000)
       y_labels <- c("Cumulative Case Count", "Cumulative Test Count", "Cumulative Positive Test Proportion")
       tool_tip <- c("Date","Cases", "Tests", "Positive Test Proportion")
       
     }
     if (input$case_death == 'death' && input$daily_tot == 'tot' && input$absolute_scaled == 'scaled')
     {
-      plot_dat <- us_clean %>% mutate(outcome = (all_death / total_pop) * 100000) %>% 
-        mutate(test_outcome = (all_total / total_pop) * 100000) %>%
-        mutate(test_frac_outcome = ((all_positive/(all_total+1)) / total_pop) * 100000)
+      plot_dat <- us_clean %>% mutate(outcome = (death / total_pop) * 100000) %>% 
+        mutate(test_outcome = (total / total_pop) * 100000) %>%
+        mutate(test_frac_outcome = ((positive/(total)) / total_pop) * 100000)
       y_labels <- c("Cumulative Fatality Count", "Cumulative Test Count", "Cumulative Positive Test Proportion")
       tool_tip <- c("Date","Fatalities", "Tests", "Positive Test Proportion")
     }
@@ -170,12 +221,12 @@ server <- function(input, output) {
     #Takes the plot_dat object created above to then designate further functionality
     if (input$xscale == 'x_count')
     {
-      #Takes plot_dat and filters All_counts by the predetermined count limit from the reactive above
+      #Takes plot_dat and filters counts by the predetermined count limit from the reactive above
       #Created the tme variable (which represents the day number of the outbreak) from the date variable
       #Groups data by state/province
       #Will plot the number of days since the selected count_limit or the date
       plot_dat <- plot_dat %>% mutate(count_limit = input$count_limit) %>%
-        filter(all_positive >= count_limit) %>%  
+        filter(positive >= count_limit) %>%  
         mutate(Time = as.numeric(date)) %>%
         group_by(state) %>% 
         mutate(Time = Time - min(Time))
