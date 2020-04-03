@@ -19,6 +19,11 @@ world_pop <- readxl::read_excel("./world_pops_modified.xlsx")
 world_pop <- world_pop %>% 
   dplyr::mutate(country_pop = country_pop_in_thousands * 1000) %>%
   dplyr::select(c(country, country_pop))
+
+```
+
+```{r}
+world_pop <- aggregate(country_pop ~ country, world_pop, FUN = sum)
 ```
 
 ```{r}
