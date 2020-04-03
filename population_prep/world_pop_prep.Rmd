@@ -30,3 +30,11 @@ world_pop <- aggregate(country_pop ~ country, world_pop, FUN = sum)
 saveRDS(world_pop, file = "../world_popsize.rds")
 ```
 
+```{r}
+us_pop <- readxl::read_excel("./us_pop.xlsx")
+```
+
+```{r}
+saveRDS(us_pop, file = "../us_popsize.rds")
+```
+
