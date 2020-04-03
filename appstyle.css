@@ -1,4 +1,4 @@
-/* styling for DSAIDE/DSAIRM app
+/* styling for covid tracker app
 ------------------------------------------- */
 
 
@@ -15,6 +15,7 @@
   	margin-right: auto;
 }
 
+
 .figure {
   	width: 50%;
 	text-align: center;
@@ -29,7 +30,14 @@
 /* Image inside figure div, for diagrams
 ---------------*/
 
-.figure img {
+#myimg {
+	max-width: 100%;
+	width: auto;
+	height: auto;
+}
+
+
+.img {
 	max-width: 100%;
 	width: auto;
 	height: auto;
