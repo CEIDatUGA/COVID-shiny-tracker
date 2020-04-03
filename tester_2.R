@@ -150,7 +150,7 @@ ui <- fluidPage(includeCSS("appstyle.css"),
                                         sidebarPanel(
                                             #Country selector coding with US, Italy, and Spain as awlays selected for a defult setting, will flash an error with none selected
                                             #Picker input = drop down bar
-                                            shinyWidgets::pickerInput("Country_selector", "Select Countries", country_var, multiple = TRUE, 
+                                            shinyWidgets::pickerInput("country_selector", "Select Countries", country_var, multiple = TRUE, 
                                                                       options = list(`actions-box` = TRUE),
                                                                       selected = c("US","Italy", "Spain")),
                                             #Shiny selectors below major picker input
@@ -343,7 +343,7 @@ server <- function(input, output) {
            plot_dat <- us_clean %>% mutate(outcome = (cases / total_pop) * 100000) %>%  
 
            y_labels <- c("Cumulative Case Count", "Cumulative Test Count", "Cumulative Positive Test Proportion")
-           tool_tip_W <- c("Date","Cases", "Tests", "Positive Test Proportion")
+           tool_tip_w <- c("Date","Cases", "Tests", "Positive Test Proportion")
            
        }
        if (input$case_death == 'death' && input$daily_tot == 'tot' && input$absolute_scaled == 'scaled')
