@@ -88,7 +88,7 @@ table td {
 	color: #123c66;
 	font-weight: bold;
 	text-align: center;
-	font-size: 120%;
+	font-size: 150%;
 }
 
 #shinyheadertext
@@ -119,6 +119,28 @@ table td {
 {
 	text-align: center;
 	font-size: 70%;
+
+}
+
+#infotext {
+	text-align: center;
+	color: #black;
+
+}
+
+#maintext {
+	text-align: center;
+	color: #black;
+	font-weight: bold;
+}
+
+#bottomtext {
+	text-align: center;
+	color: black;
+}
+
+.bottomtext {
+	text-align: center;
 
 }
 
@@ -200,11 +222,7 @@ iframe {
     padding-bottom: 0em;
 }
 
-.maintext {
-	text-align: center;
-	color: #2a3f9e;
-	font-weight: bold;
-}
+
 
 .mainsectionheader {
 	text-align: center;
@@ -215,21 +233,7 @@ iframe {
 }
 
 
-#infotext {
-	text-align: center;
-	color: #2a3f9e;
 
-}
-
-#bottomtext {
-	text-align: center;
-	color: black;
-}
-
-.bottomtext {
-	text-align: center;
-
-}
 
 #taskfloat {
   /* Appearance */
