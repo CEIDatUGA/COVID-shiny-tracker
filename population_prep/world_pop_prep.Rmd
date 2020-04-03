@@ -1,0 +1,27 @@
+---
+title: "world_pop_prep"
+author: "William Norfolk"
+date: "4/2/2020"
+output: html_document
+---
+
+```{r}
+
+library(tidyverse)
+library(readxl)
+
+```
+
+```{r}
+#Create world population RDS
+
+world_pop <- readxl::read_excel("./world_pops_modified.xlsx")
+world_pop <- world_pop %>% 
+  dplyr::mutate(country_pop = country_pop_in_thousands * 1000) %>%
+  dplyr::select(c(country, country_pop))
+```
+
+```{r}
+saveRDS(world_pop, file = "../world_popsize.rds")
+```
+

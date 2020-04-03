@@ -44,14 +44,22 @@ if (file.exists('cleandata.RDS') && as.Date(file.mtime('cleandata.RDS')) ==  Sys
     saveRDS(us_clean,'cleandata.RDS')
 }
 
-#world_cases <- readr::read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv")
-#word_deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv")
+#Pull world data
+world_cases <- readr::read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv")
+world_deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv")
+
+world_cases <- world_cases %>% dplyr::select(c(-`Province/State`, -Lat, -Long))
+world_cases <- aggregate(. ~ `Country/Region`, world_cases, FUN = sum)
+
+world_deaths <- world_deaths %>% dplyr::select(c(-`Province/State`, -Lat, -Long))
+world_deaths <- aggregate(. ~ `Country/Region`, world_deaths, FUN = sum)
+
 
 #data for population size for each state/country so we can compute cases per 100K
 us_popsize <- readRDS("./us_popsize.RDS")
-us_clean <- merge(us_popsize, us_clean)  
-#World_popsize <- 
+us_clean <- merge(us_popsize, us_clean) 
 
+world_popsize <-readRDS("./world_popsize.RDS") 
 
 state_var = unique(us_clean$state)
 
