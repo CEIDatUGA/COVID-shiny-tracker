@@ -540,6 +540,9 @@ server <- function(input, output) {
         if(input$yscale == "logarithmic") {
             p1 <- p1 + scale_y_log10() 
         }
+        if(input$xscale =="x_time"){
+            p1 <- p1 +   scale_x_date(date_labels = "%b %d")
+        }
         ggplotly(p1, tooltip = "text")
     }) #end function making case/deaths plot
     
@@ -560,6 +563,9 @@ server <- function(input, output) {
         #Flip to logscale if selected
         if(input$yscale_w == "logarithmic") {
             p4 <- p4 + scale_y_log10() 
+        }
+        if(input$xscale =="x_time"){
+            p4 <- p4 +   scale_x_date(date_labels = "%b %d")
         }
         ggplotly(p4, tooltip = "text")
     }) #end function making case/deaths plot
@@ -582,6 +588,9 @@ server <- function(input, output) {
         if(input$yscale == "logarithmic") {
             p2 <- p2 + scale_y_log10() 
         }
+        if(input$xscale =="x_time"){
+            p2 <- p2 +   scale_x_date(date_labels = "%b %d")
+        }
         ggplotly(p2, tooltip = "text")
     }) #end function making testing plot
     
@@ -599,6 +608,10 @@ server <- function(input, output) {
             geom_point(aes(text = paste(paste0("State: ", state), paste0(tool_tip[1], ": ", Time),paste0(tool_tip[4],": ", round(test_frac_outcome, digits =3)),sep ="\n")))+
             theme_light() +
             ylab(get_plot_data()[[2]][3])
+        
+        if(input$xscale =="x_time"){
+            p3 <- p3 +   scale_x_date(date_labels = "%b %d")
+        }
         ggplotly(p3, tooltip = "text")
     }) #end function making testing plot
     
