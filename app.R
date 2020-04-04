@@ -364,6 +364,20 @@ server <- function(input, output) {
             mutate(Time = Time - min(Time))
         
     }
+    shift_x_axis_w <- function(plot_dat)
+    {
+      #Takes plot_dat and filters counts by the predetermined count limit from the reactive above
+      #Created the tme variable (which represents the day number of the outbreak) from the date variable
+      #Groups data by state/province
+      #Will plot the number of days since the selected count_limit or the date
+      plot_dat <- plot_dat %>% mutate(count_limit = input$count_limit_w) %>%
+        filter(total_cases >= count_limit) %>%  
+        mutate(Time = as.numeric(date)) %>%
+        group_by(location) %>% 
+        mutate(Time = Time - min(Time))
+      
+    }
+    
     
     
     #Reactive function to prepare plot data
@@ -472,7 +486,7 @@ server <- function(input, output) {
        #Takes the plot_dat object created above to then designate further functionality
        if (input$xscale_w == 'x_count')
        {
-           plot_dat <- shift_x_axis(plot_dat)
+           plot_dat <- shift_x_axis_w(plot_dat)
            tool_tip_w[1] <- "Days Since X Cases"
            list(plot_dat, y_labels, tool_tip_w)
        }
@@ -526,7 +540,7 @@ server <- function(input, output) {
         if(input$yscale_w == "logarithmic") {
             p4 <- p4 + scale_y_log10() 
         }
-        if(input$xscale =="x_time"){
+        if(input$xscale_w =="x_time"){
             p4 <- p4 +   scale_x_date(date_labels = "%b %d")
         }
         ggplotly(p4, tooltip = "text") #this current doesn't work, produces an error message 
