@@ -45,6 +45,9 @@ if (file.exists('cleandata-us.rds') && as.Date(file.mtime('cleandata-us.rds')) =
         merge(us_popsize) %>%
         rename(location = state, pop_size = total_pop, total_deaths = death, total_cases = positive, total_hospitalized = hospitalized, total_test_negative = negative, total_test_positive = positive, total_test_all = total) %>%
         mutate(daily_cases = daily_test_positive, total_cases = total_test_positive)
+    #Change NA hospitalizations to zero
+     us_clean$total_hospitalized[is.na(us_clean$total_hospitalized)] <- 0
+     us_clean$daily_hospitalized[is.na(us_clean$daily_hospitalized)] <- 0
     
     saveRDS(us_clean,'us_cleandata.rds')
 }
@@ -89,7 +92,6 @@ if (file.exists('cleandata-world.rds') && as.Date(file.mtime('cleandata-world.rd
     
     saveRDS(world_clean,"world_cleandata.rds")
 }
-
 
 state_var = unique(us_clean$location)
 country_var = unique(world_clean$location)
@@ -182,148 +184,29 @@ ui <- fluidPage(
         ) #close right column
     ), #closes header fluid row
     
-    navbarPage(
-        title = "YACT",
-        id = 'alltabs',
-        selected = "us",
+    navbarPage( title = "YACT", id = 'alltabs', selected = "us",
         tabPanel(
-            title = "US",
-            value = "us",
-            sidebarLayout(
-                sidebarPanel(
-                    #Picker input = drop down bar
-                    shinyWidgets::pickerInput(
-                        "state_selector",
-                        "Select States",
-                        state_var,
-                        multiple = TRUE,
-                        options = list(`actions-box` = TRUE),
-                        selected = c("CA", "WA", "GA")
-                    ),
-                    #Shiny selectors below major picker input
-                    shiny::selectInput(
-                        "case_death",
-                        "Outcome",
-                        c("Cases" = "cases", "Deaths" = "deaths"),
-                        selected = "Cases"
-                    ),
-                    shiny::selectInput(
-                        "daily_tot",
-                        "Daily Count or Cumulative Total Count",
-                        c("Daily" = "daily", "Total" = "total"),
-                        selected = "Total"
-                    ),
-                    
-                    shiny::selectInput(
-                        "absolute_scaled",
-                        "Absolute or scaled values",
-                        c("Absolute number" = "actual", "Per 100K" = "scaled")
-                    ),
-                    
-                    # It would be nice if we could get the X Cases to auto-change to match the selector below
-                    shiny::selectInput(
-                        "xscale",
-                        "Set x-axis to calendar date or days since a specified total number of cases",
-                        c("Calendar Date" = "x_time", "Days Since X Cases" = "x_count")
-                    ),
-                    sliderInput(
-                        inputId = "count_limit",
-                        "Choose the total number of cases at which to start graphs",
-                        min = 1,
-                        max = 500,
-                        value = 10
-                    ),
-                    shiny::selectInput(
-                        "yscale",
-                        "Y-scale",
-                        c("linear" = "linear", "logarithmic" = "logarithmic"),
-                        selected = "logarithmic"
-                    ),
-                    br(),
-                    br()
-                ),
-                #end sidebar panel
-                
-                # Output:
-                mainPanel(
-                    #change to plotOutput if using static ggplot object
-                    plotlyOutput(outputId = "case_death_plot", height = "300px"),
-                    #change to plotOutput if using static ggplot object
-                    plotlyOutput(outputId = "testing_plot", height = "300px"),
-                    #change to plotOutput if using static ggplot object
-                    plotlyOutput(outputId = "testing_frac_plot", height = "300px")
-                ) #end main panel
-            )
-        ),
-        #close US tab
-        
-        
-        tabPanel("World",  value = "world",
-                 sidebarLayout(
-                     sidebarPanel(
-                         #Country selector coding with US, Italy, and Spain as awlays selected for a defult setting, will flash an error with none selected
-                         #Picker input = drop down bar
-                         shinyWidgets::pickerInput(
-                             "country_selector",
-                             "Select Countries",
-                             country_var,
-                             multiple = TRUE,
-                             options = list(`actions-box` = TRUE),
-                             selected = c("US", "Italy", "Spain")
-                         ),
-                         #Shiny selectors below major picker input
-                         shiny::selectInput(
-                             "case_death_w",
-                             "Outcome",
-                             c("Cases" = "cases", "Deaths" = "deaths"),
-                             selected = "Cases"
-                         ),
-                         shiny::selectInput(
-                             "daily_tot_w",
-                             "Daily Count or Cumulative Total Count",
-                             c("Daily" = "daily", "Total" = "total"),
-                             selected = "Total"
-                         ),
-                         
-                         shiny::selectInput(
-                             "absolute_scaled_w",
-                             "Absolute or scaled values",
-                             c("Absolute number" = "actual", "Per 100K" = "scaled")
-                         ),
-                         
-                         # It would be nice if we could get the X Cases to auto-change to match the selector below
-                         shiny::selectInput(
-                             "xscale_w",
-                             "Set x-axis to calendar date or days since a specified total number of cases",
-                             c("Calendar Date" = "x_time", "Days Since X Cases" = "x_count")
-                         ),
-                         sliderInput(
-                             inputId = "count_limit_w",
-                             "Choose the total number of cases at which to start graphs",
-                             min = 1,
-                             max = 500,
-                             value = 10
-                         ),
-                         shiny::selectInput(
-                             "yscale_w",
-                             "Y-scale",
-                             c("linear" = "linear", "logarithmic" = "logarithmic"),
-                             selected = "logarithmic"
-                         ),
-                         br(),
-                         br()
-                     ),
-                     
-                     # Output:
-                     mainPanel(
-                         #change to plotOutput if using static ggplot object
-                         plotlyOutput(outputId = "case_death_plot_world", height = "500px"),
-                         
-                     )
-                 )) #close "World" tab
-        
-    ),
-    #close NavBarPage
+          title = "US",
+          value = "us",
+                 fluidRow(
+                   column(12,
+                          uiOutput('us_ui')
+                   ),
+                   class = "mainmenurow"
+                 )
+                 
+        ), #close US tab
+        tabPanel(
+          title = "World",
+          value = "world",
+          fluidRow(
+            column(12,
+                   uiOutput('world_ui')
+            ),
+            class = "mainmenurow"
+          )
+        ) #close world tab
+     ),     #close NavBarPage
     tagList(
         hr(),
         p(
@@ -347,40 +230,172 @@ ui <- fluidPage(
 
 
 # Define server function
-server <- function(input, output) {
+server <- function(input, output, session) {
     
+
+  
+
+  observeEvent( input$alltabs == 'world', 
+                {
+                  output$world_ui <- renderUI({
+                    
+                    sidebarLayout(
+                      sidebarPanel(
+                        #Country selector coding with US, Italy, and Spain as always selected for a defult setting, will flash an error with none selected
+                        #Picker input = drop down bar
+                        shinyWidgets::pickerInput(
+                          "country_selector",
+                          "Select Countries",
+                          country_var,
+                          multiple = TRUE,
+                          options = list(`actions-box` = TRUE),
+                          selected = c("US", "Italy", "Spain")
+                        ),
+                        #Shiny selectors below major picker input
+                        shiny::selectInput(
+                          "case_death_w",
+                          "Outcome",
+                          c("Cases" = "cases", "Deaths" = "deaths"),
+                          selected = "Cases"
+                        ),
+                        shiny::selectInput(
+                          "daily_tot_w",
+                          "Daily Count or Cumulative Total Count",
+                          c("Daily" = "daily", "Total" = "total"),
+                          selected = "Total"
+                        ),
+                        
+                        shiny::selectInput(
+                          "absolute_scaled_w",
+                          "Absolute or scaled values",
+                          c("Absolute number" = "actual", "Per 100K" = "scaled")
+                        ),
+                        
+                        # It would be nice if we could get the X Cases to auto-change to match the selector below
+                        shiny::selectInput(
+                          "xscale_w",
+                          "Set x-axis to calendar date or days since a specified total number of cases",
+                          c("Calendar Date" = "x_time", "Days Since X Cases" = "x_count")
+                        ),
+                        sliderInput(
+                          inputId = "count_limit_w",
+                          "Choose the total number of cases at which to start graphs",
+                          min = 1,
+                          max = 500,
+                          value = 10
+                        ),
+                        shiny::selectInput(
+                          "yscale_w",
+                          "Y-scale",
+                          c("linear" = "linear", "logarithmic" = "logarithmic"),
+                          selected = "logarithmic"
+                        ),
+                        br(),
+                        br()
+                      ),
+                      
+                      # Output:
+                      mainPanel(
+                        #change to plotOutput if using static ggplot object
+                        plotlyOutput(outputId = "case_death_plot_world", height = "500px"),
+                          ) #close mainpanel
+                    ) #close sidebar layout
+                  }) #end render UI
+          }) #end world observe event 
+  
+      
+  observeEvent( input$alltabs == 'us', 
+  {
+    output$us_ui <- renderUI({
+      
+      sidebarLayout(
+        sidebarPanel(
+          #Picker input = drop down bar
+          shinyWidgets::pickerInput(
+            "state_selector",
+            "Select States",
+            state_var,
+            multiple = TRUE,
+            options = list(`actions-box` = TRUE),
+            selected = c("CA", "WA", "GA")
+          ),
+          #Shiny selectors below major picker input
+          shiny::selectInput(
+            "case_death",
+            "Outcome",
+            c("Cases" = "cases", "Deaths" = "deaths", "Hospitalizations" = "hospitalizations"),
+            selected = "Cases"
+          ),
+          shiny::selectInput(
+            "daily_tot",
+            "Daily Count or Cumulative Total Count",
+            c("Daily" = "daily", "Total" = "total"),
+            selected = "Total"
+          ),
+          
+          shiny::selectInput(
+            "absolute_scaled",
+            "Absolute or scaled values",
+            c("Absolute number" = "actual", "Per 100K" = "scaled")
+          ),
+          
+          # It would be nice if we could get the X Cases to auto-change to match the selector below
+          shiny::selectInput(
+            "xscale",
+            "Set x-axis to calendar date or days since a specified total number of cases",
+            c("Calendar Date" = "x_time", "Days Since X Cases" = "x_count")
+          ),
+          sliderInput(
+            inputId = "count_limit",
+            "Choose the total number of cases at which to start graphs",
+            min = 1,
+            max = 500,
+            value = 10
+          ),
+          shiny::selectInput(
+            "yscale",
+            "Y-scale",
+            c("linear" = "linear", "logarithmic" = "logarithmic"),
+            selected = "logarithmic"
+          ),
+          br(),
+          br()
+        ),
+        #end sidebar panel
+        
+        # Output:
+        mainPanel(
+          #change to plotOutput if using static ggplot object
+          plotlyOutput(outputId = "case_death_plot", height = "300px"),
+          #change to plotOutput if using static ggplot object
+          plotlyOutput(outputId = "testing_plot", height = "300px"),
+          #change to plotOutput if using static ggplot object
+          plotlyOutput(outputId = "testing_frac_plot", height = "300px")
+        ) #end main panel
+      ) #end sidebar layout
+    }) #end render UI
+  }) #end observer listening to US tab choice
+  
+
     
+  
     #Function that does axis shift for data
-    shift_x_axis <- function(plot_dat)
+    shift_x_axis <- function(plot_dat,count_limit)
     {
         #Takes plot_dat and filters counts by the predetermined count limit from the reactive above
         #Created the tme variable (which represents the day number of the outbreak) from the date variable
         #Groups data by state/province
         #Will plot the number of days since the selected count_limit or the date
-        plot_dat <- plot_dat %>% mutate(count_limit = input$count_limit) %>%
+        plot_dat <- plot_dat %>% 
             filter(total_cases >= count_limit) %>%  
             mutate(Time = as.numeric(date)) %>%
             group_by(location) %>% 
             mutate(Time = Time - min(Time))
         
     }
-    shift_x_axis_w <- function(plot_dat)
-    {
-      #Takes plot_dat and filters counts by the predetermined count limit from the reactive above
-      #Created the tme variable (which represents the day number of the outbreak) from the date variable
-      #Groups data by state/province
-      #Will plot the number of days since the selected count_limit or the date
-      plot_dat <- plot_dat %>% mutate(count_limit = input$count_limit_w) %>%
-        filter(total_cases >= count_limit) %>%  
-        mutate(Time = as.numeric(date)) %>%
-        group_by(location) %>% 
-        mutate(Time = Time - min(Time))
-      
-    }
     
     
-    
-    #Reactive function to prepare plot data
+    #Reactive function to prepare US plot data
     get_plot_data <- reactive({  
         
         #choose either cases or deaths to plot US DATA
@@ -402,7 +417,7 @@ server <- function(input, output) {
         }
         if (input$case_death == 'cases' && input$daily_tot == 'total')
         {
-            plot_dat <- us_clean %>% mutate(outcome = daily_cases) %>%  
+            plot_dat <- us_clean %>% mutate(outcome = total_cases) %>%  
                 mutate(test_outcome = daily_test_all) %>%
                 mutate(test_frac_outcome = daily_test_positive/daily_test_all)
             y_labels <- c("Cumulative Case Count", "Cumulative Test Count", "Cumulative Positive Test Proportion")
@@ -417,6 +432,24 @@ server <- function(input, output) {
             y_labels <- c("Cumulative Fatality Count", "Cumulative Test Count", "Cumulative Positive Test Proportion")
             tool_tip <- c("Date","Fatalities", "Tests", "Positive Test Proportion")
         }
+        if (input$case_death == 'hospitalizations' && input$daily_tot == 'daily')
+        {
+           plot_dat <- us_clean %>% mutate(outcome = daily_hospitalized) %>%  
+               mutate(test_outcome = daily_test_all) %>%
+               mutate(test_frac_outcome = daily_test_positive/daily_test_all)
+           y_labels <- c("Daily Hospitalization Count", "Cumulative Test Count", "Cumulative Positive Test Proportion")
+           tool_tip <- c("Date","Hospitalizations", "Tests", "Positive Test Proportion")
+        
+        }
+        if (input$case_death == 'hospitalizations' && input$daily_tot == 'total')
+        {
+           plot_dat <- us_clean %>% mutate(outcome = total_hospitalized) %>% 
+               mutate(test_outcome = daily_test_all) %>%
+              mutate(test_frac_outcome = daily_test_positive/daily_test_all)
+          y_labels <- c("Cumulative Hospitalization Count", "Cumulative Test Count", "Cumulative Positive Test Proportion")
+          tool_tip <- c("Date","Hospitalizations", "Tests", "Positive Test Proportion")
+        }
+      
         
         #if we want scaling by 100K, do extra scaling 
         if (input$absolute_scaled == 'scaled')
@@ -425,13 +458,11 @@ server <- function(input, output) {
             mutate(test_outcome = test_outcome / pop_size * 100000)
         }
         
-        
-       
         #adjust data to align for plotting by cases on x-axis. 
         #Takes the plot_dat object created above to then designate further functionality
         if (input$xscale == 'x_count')
         {
-            plot_dat <- shift_x_axis(plot_dat)
+            plot_dat <- shift_x_axis(plot_dat,input$count_limit)
             tool_tip[1] <- "Days Since X Cases"
             list(plot_dat, y_labels, tool_tip)
         }
@@ -442,7 +473,7 @@ server <- function(input, output) {
         } 
     }) #end reactive function that produces the right plot_dat data needed
 
-   #Start World Data
+   #function to generate world data for plot
    get_plot_data_world <- reactive({
 
     if (input$case_death_w == 'cases' && input$daily_tot_w == 'daily')
@@ -486,7 +517,7 @@ server <- function(input, output) {
        #Takes the plot_dat object created above to then designate further functionality
        if (input$xscale_w == 'x_count')
        {
-           plot_dat <- shift_x_axis_w(plot_dat)
+           plot_dat <- shift_x_axis(plot_dat,input$count_limit_w)
            tool_tip_w[1] <- "Days Since X Cases"
            list(plot_dat, y_labels, tool_tip_w)
        }
