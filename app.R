@@ -20,7 +20,7 @@ library(plotly)
 #from https://covidtracking.com/
 
 #for speed, we should do it such that it only gets it from the API if the data is old, otherwise it should load locally
-if (file.exists('cleandata-us.rds') && as.Date(file.mtime('cleandata-us.rds')) ==  Sys.Date()) {
+if (file.exists('us_cleandata.rds') && as.Date(file.mtime('us_cleandata.rds')) ==  Sys.Date()) {
     #################################
     # load already clean data locally
     #################################
@@ -29,7 +29,7 @@ if (file.exists('cleandata-us.rds') && as.Date(file.mtime('cleandata-us.rds')) =
     #################################
     # pull data from Covidtracking and process
     #################################
-    us_data <- read_csv("http://covidtracking.com/api/states/daily.csv")
+    us_data <- read_csv("https://covidtracking.com/api/states/daily.csv")
     #data for population size for each state/country so we can compute cases per 100K
     us_popsize <- readRDS("us_popsize.rds")
     
@@ -37,17 +37,17 @@ if (file.exists('cleandata-us.rds') && as.Date(file.mtime('cleandata-us.rds')) =
     us_clean <- us_data %>% dplyr::select(c(date,state,positive,negative,total,hospitalized,death)) %>%
         mutate(date = as.Date(as.character(date),format="%Y%m%d")) %>% 
         group_by(state) %>% arrange(date) %>%
-        mutate(daily_test_positive = c(0,diff(positive))) %>% 
-        mutate(daily_test_negative = c(0,diff(negative))) %>% 
-        mutate(daily_test_all = c(0,diff(total))) %>% 
-        mutate(daily_hospitalized = c(0,diff(hospitalized))) %>% 
-        mutate(daily_deaths = c(0,diff(death))) %>%
+        mutate(Daily_Test_Positive = c(0,diff(positive))) %>% 
+        mutate(Daily_Test_Negative = c(0,diff(negative))) %>% 
+        mutate(Daily_Test_All = c(0,diff(total))) %>% 
+        mutate(Daily_Hospitalized = c(0,diff(hospitalized))) %>% 
+        mutate(Daily_Deaths = c(0,diff(death))) %>%
         merge(us_popsize) %>%
-        rename(location = state, pop_size = total_pop, total_deaths = death, total_cases = positive, total_hospitalized = hospitalized, total_test_negative = negative, total_test_positive = positive, total_test_all = total) %>%
-        mutate(daily_cases = daily_test_positive, total_cases = total_test_positive)
+        rename(Date = date, Location = state, Population_Size = total_pop, Total_Deaths = death, Total_Cases = positive, Total_Hospitalized = hospitalized, Total_Test_Negative = negative, Total_Test_Positive = positive, Total_Test_All = total) %>%
+        mutate(Daily_Cases = Daily_Test_Positive, Total_Cases = Total_Test_Positive)
     #Change NA hospitalizations to zero
-     us_clean$total_hospitalized[is.na(us_clean$total_hospitalized)] <- 0
-     us_clean$daily_hospitalized[is.na(us_clean$daily_hospitalized)] <- 0
+     us_clean$Total_Hospitalized[is.na(us_clean$Total_Hospitalized)] <- 0
+     us_clean$Daily_Hospitalized[is.na(us_clean$Daily_Hospitalized)] <- 0
     
     saveRDS(us_clean,'us_cleandata.rds')
 }
@@ -55,7 +55,7 @@ if (file.exists('cleandata-us.rds') && as.Date(file.mtime('cleandata-us.rds')) =
 
 #Pull world data
 #for speed, we should do it such that it only gets it from the API if the data is old, otherwise it should load locally
-if (file.exists('cleandata-world.rds') && as.Date(file.mtime('cleandata-world.rds')) ==  Sys.Date()) {
+if (file.exists('world_cleandata.rds') && as.Date(file.mtime('world_cleandata.rds')) ==  Sys.Date()) {
     #################################
     # load already clean data locally
     #################################
@@ -84,17 +84,17 @@ if (file.exists('cleandata-world.rds') && as.Date(file.mtime('cleandata-world.rd
     
     world_clean <- all_merge %>% mutate(date = as.Date(as.character(date),format="%m/%d/%y")) %>%
         group_by(country) %>% arrange(date) %>%
-        mutate(daily_cases = c(0,diff(cases))) %>%
-        mutate(daily_deaths = c(0,diff(deaths))) %>% 
+        mutate(Daily_Cases = c(0,diff(cases))) %>%
+        mutate(Daily_Deaths = c(0,diff(deaths))) %>% 
         ungroup() %>%
-        rename(total_deaths = deaths, total_cases = cases, location = country, pop_size = country_pop) %>% 
+        rename(Date = date, Total_Deaths = deaths, Total_Cases = cases, Location = country, Population_Size = country_pop) %>% 
         data.frame()
     
     saveRDS(world_clean,"world_cleandata.rds")
 }
 
-state_var = unique(us_clean$location)
-country_var = unique(world_clean$location)
+state_var = unique(us_clean$Location)
+country_var = unique(world_clean$Location)
 
 #################################
 # Define UI
@@ -233,8 +233,6 @@ ui <- fluidPage(
 server <- function(input, output, session) {
     
 
-  
-
   observeEvent( input$alltabs == 'world', 
                 {
                   output$world_ui <- renderUI({
@@ -255,13 +253,13 @@ server <- function(input, output, session) {
                         shiny::selectInput(
                           "case_death_w",
                           "Outcome",
-                          c("Cases" = "cases", "Deaths" = "deaths"),
+                          c("Cases" = "Cases", "Deaths" = "Deaths"),
                           selected = "Cases"
                         ),
                         shiny::selectInput(
                           "daily_tot_w",
                           "Daily Count or Cumulative Total Count",
-                          c("Daily" = "daily", "Total" = "total"),
+                          c("Daily" = "Daily", "Total" = "Total"),
                           selected = "Total"
                         ),
                         
@@ -274,12 +272,12 @@ server <- function(input, output, session) {
                         # It would be nice if we could get the X Cases to auto-change to match the selector below
                         shiny::selectInput(
                           "xscale_w",
-                          "Set x-axis to calendar date or days since a specified total number of cases",
+                          "Set x-axis to calendar date or days since a specified Total number of cases",
                           c("Calendar Date" = "x_time", "Days Since X Cases" = "x_count")
                         ),
                         sliderInput(
                           inputId = "count_limit_w",
-                          "Choose the total number of cases at which to start graphs",
+                          "Choose the Total number of cases at which to start graphs",
                           min = 1,
                           max = 500,
                           value = 10
@@ -301,7 +299,41 @@ server <- function(input, output, session) {
                           ) #close mainpanel
                     ) #close sidebar layout
                   }) #end render UI
-          }) #end world observe event 
+                  
+        #reactive function to generate world data for plot
+        get_plot_data_world <- reactive({
+          
+          plot_list <- set_outcome(world_clean,input$case_death_w,input$daily_tot_w,input$absolute_scaled_w,input$xscale_w,input$count_limit_w,input$alltabs)
+          
+        })
+                  
+        #make the plot for cases/deaths for world data
+        output$case_death_plot_world <- renderPlotly({
+          w_plot_dat <- get_plot_data_world()
+          tool_tip_w <- w_plot_dat[[3]]
+          scaleparam <- "fixed"
+          p4 <- w_plot_dat[[1]] %>% 
+            #Filter data for cases >0 and selected states
+            filter(outcome > 0) %>% 
+            filter(Location %in% input$country_selector) %>% 
+            #Begin plot
+            ggplot(aes(x=Time, y = outcome, color = Location))+
+            geom_line() +
+            geom_point(aes(text = paste(paste0("Country: ", Location), paste0(tool_tip_w[1], ": ", Time),paste0(tool_tip_w[2],": ", outcome),sep ="\n")))+
+            theme_light() + 
+            ylab(w_plot_dat[[2]][1])
+          #Flip to logscale if selected
+          if(input$yscale_w == "logarithmic") {
+            p4 <- p4 + scale_y_log10() 
+          }
+          if(input$xscale_w =="x_time"){
+            p4 <- p4 +   scale_x_date(date_labels = "%b %d")
+          }
+          ggplotly(p4, tooltip = "text") #this current doesn't work, produces an error message 
+        }) #end function making case/deaths plot          
+        
+        
+    }) #end world observe event 
   
       
   observeEvent( input$alltabs == 'us', 
@@ -323,13 +355,13 @@ server <- function(input, output, session) {
           shiny::selectInput(
             "case_death",
             "Outcome",
-            c("Cases" = "cases", "Deaths" = "deaths", "Hospitalizations" = "hospitalizations"),
+            c("Cases" = "Cases", "Deaths" = "Deaths", "Hospitalizations" = "Hospitalized"),
             selected = "Cases"
           ),
           shiny::selectInput(
             "daily_tot",
             "Daily Count or Cumulative Total Count",
-            c("Daily" = "daily", "Total" = "total"),
+            c("Daily" = "Daily", "Total" = "Total"),
             selected = "Total"
           ),
           
@@ -342,12 +374,12 @@ server <- function(input, output, session) {
           # It would be nice if we could get the X Cases to auto-change to match the selector below
           shiny::selectInput(
             "xscale",
-            "Set x-axis to calendar date or days since a specified total number of cases",
+            "Set x-axis to calendar date or days since a specified Total number of cases",
             c("Calendar Date" = "x_time", "Days Since X Cases" = "x_count")
           ),
           sliderInput(
             inputId = "count_limit",
-            "Choose the total number of cases at which to start graphs",
+            "Choose the Total number of cases at which to start graphs",
             min = 1,
             max = 500,
             value = 10
@@ -374,6 +406,87 @@ server <- function(input, output, session) {
         ) #end main panel
       ) #end sidebar layout
     }) #end render UI
+    
+    
+    
+    #Reactive function to prepare US plot data
+    get_plot_data_us <- reactive({  
+      
+      plot_list <- set_outcome(us_clean,input$case_death,input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs)
+    }) #end reactive function that produces the right plot_dat data needed
+    
+    #make the plot for cases/deaths for US data
+    output$case_death_plot <- renderPlotly({
+      tool_tip <- get_plot_data_us()[[3]]
+      scaleparam <- "fixed"
+      p1 <- get_plot_data_us()[[1]] %>% 
+        #Filter data for cases >0 and selected states
+        filter(outcome > 0) %>% 
+        filter(Location %in% input$state_selector) %>% 
+        #Begin plot
+        ggplot(aes(x=Time, y = outcome, color = Location))+
+        geom_line()+
+        geom_point(aes(text = paste(paste0("State: ", Location), paste0(tool_tip[1], ": ", Time),paste0(tool_tip[2],": ", outcome),sep ="\n")))+
+        theme_light() + 
+        ylab(get_plot_data_us()[[2]][1])
+      #Flip to logscale if selected
+      if(input$yscale == "logarithmic") {
+        p1 <- p1 + scale_y_log10() 
+      }
+      if(input$xscale =="x_time"){
+        p1 <- p1 +   scale_x_date(date_labels = "%b %d")
+      }
+      ggplotly(p1, tooltip = "text")
+    }) #end function making case/deaths plot
+    
+    
+    
+    #make the testing plots 
+    output$testing_plot <- renderPlotly({
+      scaleparam <- "fixed"
+      tool_tip <- get_plot_data_us()[[3]]
+      p2 <- get_plot_data_us()[[1]] %>% 
+        #Filter data for cases >0 and selected states
+        filter(test_outcome > 0) %>% 
+        filter(Location %in% input$state_selector) %>% 
+        #Begin plot
+        ggplot(aes(x=Time, y = test_outcome, color = Location))+
+        geom_line()+
+        geom_point(aes(text = paste(paste0("State: ", Location), paste0(tool_tip[1], ": ", Time),paste0(tool_tip[3],": ", test_outcome),sep ="\n")))+
+        theme_light()+
+        ylab(get_plot_data_us()[[2]][2])
+      #Flip to logscale if selected
+      if(input$yscale == "logarithmic") {
+        p2 <- p2 + scale_y_log10() 
+      }
+      if(input$xscale =="x_time"){
+        p2 <- p2 +   scale_x_date(date_labels = "%b %d")
+      }
+      ggplotly(p2, tooltip = "text")
+    }) #end function making testing plot
+    
+    #make the fraction positive testing plots 
+    output$testing_frac_plot <- renderPlotly({
+      scaleparam <- "fixed"
+      tool_tip <- get_plot_data_us()[[3]]
+      p3 <- get_plot_data_us()[[1]] %>% 
+        #Filter data for cases >0 and selected states
+        filter(test_frac_outcome > 0) %>% 
+        filter(Location %in% input$state_selector) %>% 
+        #Begin plot
+        ggplot(aes(x=Time, y = test_frac_outcome, color = Location))+
+        geom_line()+
+        geom_point(aes(text = paste(paste0("State: ", Location), paste0(tool_tip[1], ": ", Time),paste0(tool_tip[4],": ", round(test_frac_outcome, digits =3)),sep ="\n")))+
+        theme_light() +
+        ylab(get_plot_data_us()[[2]][3])
+      
+      if(input$xscale =="x_time"){
+        p3 <- p3 +   scale_x_date(date_labels = "%b %d")
+      }
+      ggplotly(p3, tooltip = "text")
+    }) #end function making testing plot
+    
+    
   }) #end observer listening to US tab choice
   
 
@@ -387,240 +500,67 @@ server <- function(input, output, session) {
         #Groups data by state/province
         #Will plot the number of days since the selected count_limit or the date
         plot_dat <- plot_dat %>% 
-            filter(total_cases >= count_limit) %>%  
-            mutate(Time = as.numeric(date)) %>%
-            group_by(location) %>% 
+            filter(Total_Cases >= count_limit) %>%  
+            mutate(Time = as.numeric(Date)) %>%
+            group_by(Location) %>% 
             mutate(Time = Time - min(Time))
         
     }
     
-    
-    #Reactive function to prepare US plot data
-    get_plot_data <- reactive({  
+    #function that takes UI settings and produces data for plot accordingly
+    set_outcome <- function(plot_dat,case_death,daily_tot,absolute_scaled,xscale,count_limit,selected_tab)
+    {
+      out_type = paste(daily_tot,case_death,sep='_') #make string from UI inputs that correspond with variable names
+      plot_dat <- plot_dat %>% mutate(outcome = get(out_type)) #pick output based on variable name created from UI
+      
+       
+      # # do testing data for US 
+       if (selected_tab == "us")  
+       {
+         test_out_type = paste(daily_tot,'Test_All',sep='_')
+         test_pos_type = paste(daily_tot,'Test_Positive',sep='_')
+         plot_dat <- plot_dat %>% mutate(test_outcome = get(test_out_type)) 
+         plot_dat <- plot_dat %>% mutate(test_frac_outcome = get(test_pos_type)/get(test_out_type))
+       }
+      
         
-        #choose either cases or deaths to plot US DATA
-        if (input$case_death == 'cases' && input$daily_tot == 'daily')
-        {
-            plot_dat <- us_clean %>% mutate(outcome = daily_cases) %>%  
-                mutate(test_outcome = daily_test_all) %>%
-                mutate(test_frac_outcome = daily_test_positive/daily_test_all) 
-            y_labels <- c("Daily New Case Count", "Daily Number of Tests", "Daily Positive Test Proportion")
-            tool_tip <- c("Date", "Cases", "Tests", "Positive Test Proportion")
-        }
-        if (input$case_death == 'deaths' && input$daily_tot == 'daily')
-        {
-            plot_dat <- us_clean %>% mutate(outcome = daily_deaths)  %>%
-                mutate(test_outcome = daily_test_all) %>%
-                mutate(test_frac_outcome = daily_test_positive/daily_test_all)
-            y_labels <- c("Daily Fatality Count", "Daily Number of Tests", "Daily Positive Test Proportion")
-            tool_tip <- c("Date","Fatalities", "Tests", "Positive Test Proportion")
-        }
-        if (input$case_death == 'cases' && input$daily_tot == 'total')
-        {
-            plot_dat <- us_clean %>% mutate(outcome = total_cases) %>%  
-                mutate(test_outcome = total_test_all) %>%
-                mutate(test_frac_outcome = total_test_positive/total_test_all)
-            y_labels <- c("Cumulative Case Count", "Cumulative Test Count", "Cumulative Positive Test Proportion")
-            tool_tip <- c("Date","Cases", "Tests", "Positive Test Proportion")
+      #if we want scaling by 100K, do extra scaling 
+       if (absolute_scaled == 'scaled')
+       {
+         plot_dat <- plot_dat %>% mutate(outcome = outcome / Population_Size * 100000) 
+          if (selected_tab == "us" )  
+          {
+            plot_dat <- plot_dat %>%  mutate(test_outcome = test_outcome / Population_Size * 100000)
             
-        }
-        if (input$case_death == 'deaths' && input$daily_tot == 'total')
-        {
-            plot_dat <- us_clean %>% mutate(outcome = total_deaths) %>% 
-                mutate(test_outcome = total_test_all) %>%
-                mutate(test_frac_outcome = total_test_positive/total_test_all)
-            y_labels <- c("Cumulative Fatality Count", "Cumulative Test Count", "Cumulative Positive Test Proportion")
-            tool_tip <- c("Date","Fatalities", "Tests", "Positive Test Proportion")
-        }
-        if (input$case_death == 'hospitalizations' && input$daily_tot == 'daily')
-        {
-           plot_dat <- us_clean %>% mutate(outcome = daily_hospitalized) %>%  
-               mutate(test_outcome = daily_test_all) %>%
-               mutate(test_frac_outcome = daily_test_positive/daily_test_all)
-           y_labels <- c("Daily Hospitalization Count", "Cumulative Test Count", "Cumulative Positive Test Proportion")
-           tool_tip <- c("Date","Hospitalizations", "Tests", "Positive Test Proportion")
-        
-        }
-        if (input$case_death == 'hospitalizations' && input$daily_tot == 'total')
-        {
-           plot_dat <- us_clean %>% mutate(outcome = total_hospitalized) %>% 
-               mutate(test_outcome = total_test_all) %>%
-              mutate(test_frac_outcome = total_test_positive/total_test_all)
-          y_labels <- c("Cumulative Hospitalization Count", "Cumulative Test Count", "Cumulative Positive Test Proportion")
-          tool_tip <- c("Date","Hospitalizations", "Tests", "Positive Test Proportion")
-        }
-      
-        
-        #if we want scaling by 100K, do extra scaling 
-        if (input$absolute_scaled == 'scaled')
-        {
-            plot_dat <- plot_dat %>% mutate(outcome = outcome / pop_size * 100000) %>%  
-            mutate(test_outcome = test_outcome / pop_size * 100000)
-        }
-        
-        #adjust data to align for plotting by cases on x-axis. 
-        #Takes the plot_dat object created above to then designate further functionality
-        if (input$xscale == 'x_count')
-        {
-            plot_dat <- shift_x_axis(plot_dat,input$count_limit)
-            tool_tip[1] <- "Days Since X Cases"
-            list(plot_dat, y_labels, tool_tip)
-        }
-        else
-        {
-            plot_dat <- plot_dat %>% mutate(Time = date)
-            list(plot_dat, y_labels, tool_tip)
-        } 
-    }) #end reactive function that produces the right plot_dat data needed
-
-   #function to generate world data for plot
-   get_plot_data_world <- reactive({
-
-    if (input$case_death_w == 'cases' && input$daily_tot_w == 'daily')
-    {
-        plot_dat <- world_clean %>% mutate(outcome = daily_cases)
-
-        y_labels <- c("Daily New Case Count", "Daily Number of Tests", "Daily Positive Test Proportion")
-        tool_tip_w <- c("Date", "Cases", "Tests", "Positive Test Proportion")
-    }
-    if (input$case_death_w == 'deaths' && input$daily_tot_w == 'daily')
-    {
-        plot_dat <- world_clean %>% mutate(outcome = daily_deaths)
-
-        y_labels <- c("Daily Fatality Count", "Daily Number of Tests", "Daily Positive Test Proportion")
-        tool_tip_w <- c("Date","Fatalities", "Tests", "Positive Test Proportion")
-    }
-    if (input$case_death_w == 'cases' && input$daily_tot_w == 'total')
-    {
-        plot_dat <- world_clean %>% mutate(outcome = total_cases)  
-
-        y_labels <- c("Cumulative Case Count", "Cumulative Test Count", "Cumulative Positive Test Proportion")
-        tool_tip_w <- c("Date","Cases", "Tests", "Positive Test Proportion")
-        
-    }
-    if (input$case_death_w == 'deaths' && input$daily_tot_w == 'total')
-    {
-        plot_dat <- world_clean %>% mutate(outcome = total_deaths)
-
-        y_labels <- c("Cumulative Fatality Count", "Cumulative Test Count", "Cumulative Positive Test Proportion")
-        tool_tip_w <- c("Date","Fatalities", "Tests", "Positive Test Proportion")
-    }
-       
-       #if we want scaling by 100K, do extra scaling 
-       if (input$absolute_scaled_w == 'scaled')
-       {
-           plot_dat <- plot_dat %>% mutate(outcome = outcome / pop_size * 100000)  
+          }
+         
        }
-       
-       
-       #adjust data to align for plotting by cases on x-axis. 
-       #Takes the plot_dat object created above to then designate further functionality
-       if (input$xscale_w == 'x_count')
-       {
-           plot_dat <- shift_x_axis(plot_dat,input$count_limit_w)
-           tool_tip_w[1] <- "Days Since X Cases"
-           list(plot_dat, y_labels, tool_tip_w)
-       }
-       else
-       {
-           plot_dat <- plot_dat %>% mutate(Time = date)
-           list(plot_dat, y_labels, tool_tip_w)
-       } 
+
+      #set labels and tool tips based on input - entries 2 and 3 are ignored for world plot
+
+      y_labels <- paste(daily_tot, c("Cases", "Tests", "Positive Test Proportion"), sep = " ")
       
-   })
-    #make the plot for cases/deaths for US data
-    output$case_death_plot <- renderPlotly({
-        tool_tip <- get_plot_data()[[3]]
-        scaleparam <- "fixed"
-        p1 <- get_plot_data()[[1]] %>% 
-            #Filter data for cases >0 and selected states
-            filter(outcome > 0) %>% 
-            filter(location %in% input$state_selector) %>% 
-            #Begin plot
-            ggplot(aes(x=Time, y = outcome, color = location))+
-            geom_line()+
-            geom_point(aes(text = paste(paste0("State: ", location), paste0(tool_tip[1], ": ", Time),paste0(tool_tip[2],": ", outcome),sep ="\n")))+
-            theme_light() + 
-            ylab(get_plot_data()[[2]][1])
-        #Flip to logscale if selected
-        if(input$yscale == "logarithmic") {
-            p1 <- p1 + scale_y_log10() 
-        }
-        if(input$xscale =="x_time"){
-            p1 <- p1 +   scale_x_date(date_labels = "%b %d")
-        }
-        ggplotly(p1, tooltip = "text")
-    }) #end function making case/deaths plot
-    
-    #make the plot for cases/deaths for world data
-    output$case_death_plot_world <- renderPlotly({
-        w_plot_dat <- get_plot_data_world()
-        tool_tip_w <- w_plot_dat[[3]]
-        scaleparam <- "fixed"
-        p4 <- w_plot_dat[[1]] %>% 
-            #Filter data for cases >0 and selected states
-            filter(outcome > 0) %>% 
-            filter(location %in% input$country_selector) %>% 
-            #Begin plot
-            ggplot(aes(x=Time, y = outcome, color = location))+
-            geom_line() +
-            geom_point(aes(text = paste(paste0("Country: ", location), paste0(tool_tip_w[1], ": ", Time),paste0(tool_tip_w[2],": ", outcome),sep ="\n")))+
-            theme_light() + 
-            ylab(w_plot_dat[[2]][1])
-        #Flip to logscale if selected
-        if(input$yscale_w == "logarithmic") {
-            p4 <- p4 + scale_y_log10() 
-        }
-        if(input$xscale_w =="x_time"){
-            p4 <- p4 +   scale_x_date(date_labels = "%b %d")
-        }
-        ggplotly(p4, tooltip = "text") #this current doesn't work, produces an error message 
-    }) #end function making case/deaths plot
-    
-    #make the testing plots 
-    output$testing_plot <- renderPlotly({
-        scaleparam <- "fixed"
-        tool_tip <- get_plot_data()[[3]]
-        p2 <- get_plot_data()[[1]] %>% 
-            #Filter data for cases >0 and selected states
-            filter(test_outcome > 0) %>% 
-            filter(location %in% input$state_selector) %>% 
-            #Begin plot
-            ggplot(aes(x=Time, y = test_outcome, color = location))+
-            geom_line()+
-            geom_point(aes(text = paste(paste0("State: ", location), paste0(tool_tip[1], ": ", Time),paste0(tool_tip[3],": ", test_outcome),sep ="\n")))+
-            theme_light()+
-            ylab(get_plot_data()[[2]][2])
-        #Flip to logscale if selected
-        if(input$yscale == "logarithmic") {
-            p2 <- p2 + scale_y_log10() 
-        }
-        if(input$xscale =="x_time"){
-            p2 <- p2 +   scale_x_date(date_labels = "%b %d")
-        }
-        ggplotly(p2, tooltip = "text")
-    }) #end function making testing plot
-    
-    #make the fraction positive testing plots 
-    output$testing_frac_plot <- renderPlotly({
-        scaleparam <- "fixed"
-        tool_tip <- get_plot_data()[[3]]
-        p3 <- get_plot_data()[[1]] %>% 
-            #Filter data for cases >0 and selected states
-            filter(test_frac_outcome > 0) %>% 
-            filter(location %in% input$state_selector) %>% 
-            #Begin plot
-            ggplot(aes(x=Time, y = test_frac_outcome, color = location))+
-            geom_line()+
-            geom_point(aes(text = paste(paste0("State: ", location), paste0(tool_tip[1], ": ", Time),paste0(tool_tip[4],": ", round(test_frac_outcome, digits =3)),sep ="\n")))+
-            theme_light() +
-            ylab(get_plot_data()[[2]][3])
+      
+      tool_tip <- c("Date","Cases", "Tests", "Positive Test Proportion")
+      tool_tip[2] <- case_death
+      
+      #adjust data to align for plotting by cases on x-axis. 
+      #Takes the plot_dat object created above to then designate further functionality
+      if (xscale == 'x_count')
+      {
+        plot_dat <- shift_x_axis(plot_dat,count_limit)
+      }
+      else
+      {
+        plot_dat <- plot_dat %>% mutate(Time = Date)
+      }
         
-        if(input$xscale =="x_time"){
-            p3 <- p3 +   scale_x_date(date_labels = "%b %d")
-        }
-        ggplotly(p3, tooltip = "text")
-    }) #end function making testing plot
+      list(plot_dat, y_labels, tool_tip) #return list
+    } #end function that produces output for plots
+    
+   
+   
+  
     
 } #end server function
 
