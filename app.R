@@ -244,11 +244,12 @@ server <- function(input, output, session) {
             geom_line() +
             geom_point(aes(text = paste(paste0("Country: ", Location), paste0(tool_tip_w[1], ": ", Date),paste0(tool_tip_w[2],": ", outcome),sep ="\n")))+
             theme_light() + 
-            scale_y_continuous(labels = comma)+
             ylab(w_plot_dat[[2]][1])
           #Flip to logscale if selected
           if(input$yscale_w == "logarithmic") {
             p4 <- p4 + scale_y_log10(labels = comma) 
+          }else{
+            p4 <- p4 + scale_y_continuous(labels = comma)
           }
           if(input$xscale_w =="x_time"){
             p4 <- p4 + scale_x_date(date_labels = "%b %d")
@@ -345,11 +346,12 @@ server <- function(input, output, session) {
         geom_line()+
         geom_point(aes(text = paste(paste0("State: ", Location), paste0(tool_tip[1], ": ", Date),paste0(tool_tip[2],": ", outcome),sep ="\n")))+
         theme_light() + 
-        scale_y_continuous(labels = comma)+
         ylab(us_plot_dat[[2]][1])
       #Flip to logscale if selected
       if(input$yscale == "logarithmic") {
         p1 <- p1 + scale_y_log10(labels = comma) 
+      }else{
+        p1 <- p1 + scale_y_continuous(labels = comma)
       }
       if(input$xscale =="x_time"){
         p1 <- p1 +   scale_x_date(date_labels = "%b %d")
@@ -372,11 +374,12 @@ server <- function(input, output, session) {
         geom_line()+
         geom_point(aes(text = paste(paste0("State: ", Location), paste0(tool_tip[1], ": ", Date),paste0(tool_tip[3],": ", test_outcome),sep ="\n")))+
         theme_light()+
-        scale_y_continuous(labels = comma)+
         ylab(get_plot_data_us()[[2]][2])
       #Flip to logscale if selected
       if(input$yscale == "logarithmic") {
         p2 <- p2 + scale_y_log10(labels = comma) 
+      }else{
+        p2 <- p2 + scale_y_continuous(labels = comma)
       }
       if(input$xscale =="x_time"){
         p2 <- p2 +   scale_x_date(date_labels = "%b %d")
