@@ -1,0 +1,5 @@
+Things that could be done to improve app:
+
+* Fix warning message  "Warning: Ignoring unknown aesthetics: text" 
+* further streamline code
+*  tooltip show the date when we do 'days since X cases' on the x-axis?
