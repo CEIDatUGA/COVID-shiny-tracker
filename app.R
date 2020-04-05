@@ -152,7 +152,7 @@ ui <- fluidPage(
                    ),
                    'Source code for this project can be found',
                    a(
-                       "In this GitHub repository.",
+                       "in this GitHub repository.",
                        href = "https://github.com/CEIDatUGA/COVID-shiny-tracker",
                        target = "_blank"
                    ),
@@ -287,7 +287,7 @@ server <- function(input, output, session) {
                         shiny::selectInput(
                           "yscale_w",
                           "Y-scale",
-                          c("linear" = "linear", "logarithmic" = "logarithmic"),
+                          c("Linear" = "linear", "Logarithmic" = "logarithmic"),
                           selected = "logarithmic"
                         ),
                         br(),
@@ -355,7 +355,7 @@ server <- function(input, output, session) {
           shiny::selectInput(
             "yscale",
             "Y-scale",
-            c("linear" = "linear", "logarithmic" = "logarithmic"),
+            c("Linear" = "linear", "Logarithmic" = "logarithmic"),
             selected = "logarithmic"
           ),
           br(),
@@ -418,8 +418,8 @@ server <- function(input, output, session) {
         if (input$case_death == 'cases' && input$daily_tot == 'total')
         {
             plot_dat <- us_clean %>% mutate(outcome = total_cases) %>%  
-                mutate(test_outcome = daily_test_all) %>%
-                mutate(test_frac_outcome = daily_test_positive/daily_test_all)
+                mutate(test_outcome = total_test_all) %>%
+                mutate(test_frac_outcome = total_test_positive/total_test_all)
             y_labels <- c("Cumulative Case Count", "Cumulative Test Count", "Cumulative Positive Test Proportion")
             tool_tip <- c("Date","Cases", "Tests", "Positive Test Proportion")
             
@@ -427,8 +427,8 @@ server <- function(input, output, session) {
         if (input$case_death == 'deaths' && input$daily_tot == 'total')
         {
             plot_dat <- us_clean %>% mutate(outcome = total_deaths) %>% 
-                mutate(test_outcome = daily_test_all) %>%
-                mutate(test_frac_outcome = daily_test_positive/daily_test_all)
+                mutate(test_outcome = total_test_all) %>%
+                mutate(test_frac_outcome = total_test_positive/total_test_all)
             y_labels <- c("Cumulative Fatality Count", "Cumulative Test Count", "Cumulative Positive Test Proportion")
             tool_tip <- c("Date","Fatalities", "Tests", "Positive Test Proportion")
         }
@@ -444,8 +444,8 @@ server <- function(input, output, session) {
         if (input$case_death == 'hospitalizations' && input$daily_tot == 'total')
         {
            plot_dat <- us_clean %>% mutate(outcome = total_hospitalized) %>% 
-               mutate(test_outcome = daily_test_all) %>%
-              mutate(test_frac_outcome = daily_test_positive/daily_test_all)
+               mutate(test_outcome = total_test_all) %>%
+              mutate(test_frac_outcome = total_test_positive/total_test_all)
           y_labels <- c("Cumulative Hospitalization Count", "Cumulative Test Count", "Cumulative Positive Test Proportion")
           tool_tip <- c("Date","Hospitalizations", "Tests", "Positive Test Proportion")
         }
