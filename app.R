@@ -207,12 +207,10 @@ server <- function(input, output, session) {
     tool_tip[2] <- case_death #fill that automatically with either Case/Hosp/Death
     
     #adjust data to align for plotting by cases on x-axis. 
-    #Takes the plot_dat object created above to then designate further functionality
     if (xscale == 'x_count')
     {
       #Takes plot_dat and filters counts by the predetermined count limit from the reactive above
-      #Created the tme variable (which represents the day number of the outbreak) from the date variable
-      #Groups data by state/province
+      #Created the time variable (which represents the day number of the outbreak) from the date variable
       #Will plot the number of days since the selected count_limit or the date
       plot_dat <- plot_dat %>% 
         filter(Total_Cases >= count_limit) %>%  
@@ -268,13 +266,12 @@ server <- function(input, output, session) {
             sidebarLayout(
               sidebarPanel(
                 #Country selector coding with US, Italy, and Spain as always selected for a defult setting, will flash an error with none selected
-                #Picker input = drop down bar
                 shinyWidgets::pickerInput("country_selector", "Select Countries", country_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("US", "Italy", "Spain")                        ),
                 shiny::selectInput( "case_death_w", "Outcome", c("Cases" = "Cases", "Deaths" = "Deaths")),
                 shiny::selectInput("daily_tot_w", "Daily or Cumulative Numbers", c("Daily" = "Daily", "Total" = "Total")),
-                shiny::selectInput("absolute_scaled_w", "Absolute or scaled values", c("Absolute number" = "actual", "Per 100K" = "scaled") ),
-                shiny::selectInput( "xscale_w", "Set x-axis to calendar date or days since a specified Total number of cases", c("Calendar Date" = "x_time", "Days Since X Cases" = "x_count")),
-                sliderInput( inputId = "count_limit_w","Choose the Total number of cases at which to start graphs", min = 1,  max = 500,  value = 10 ),
+                shiny::selectInput("absolute_scaled_w", "Absolute or Scaled Values", c("Absolute Number" = "actual", "Per 100K" = "scaled") ),
+                shiny::selectInput( "xscale_w", "Set x-axis to Calendar Date or Days since a specified total number of cases", c("Calendar Date" = "x_time", "Days Since X Cases" = "x_count")),
+                sliderInput( inputId = "count_limit_w","Choose the Total Number of Cases at which to start graphs", min = 1,  max = 500,  value = 10 ),
                 shiny::selectInput( "yscale_w",  "Y-scale", c("Linear" = "linear", "Logarithmic" = "logarithmic"))
               ),
               
@@ -304,10 +301,10 @@ server <- function(input, output, session) {
         sidebarPanel(
           shinyWidgets::pickerInput("state_selector", "Select States", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("CA", "WA", "GA") ),
           shiny::selectInput( "case_death",   "Outcome",c("Cases" = "Cases", "Deaths" = "Deaths", "Hospitalizations" = "Hospitalized")),
-          shiny::selectInput("daily_tot", "Daily or total Numbers", c("Daily" = "Daily", "Total" = "Total" )),
-          shiny::selectInput( "absolute_scaled","Absolute or scaled values",c("Absolute number" = "actual", "Per 100K" = "scaled") ),
-         shiny::selectInput("xscale", "Set x-axis to calendar date or days since a specified Total number of cases", c("Calendar Date" = "x_time", "Days Since X Cases" = "x_count")),
-          sliderInput(  inputId = "count_limit", "Choose the Total number of cases at which to start graphs", min = 1,  max = 500, value = 10 ),
+          shiny::selectInput("daily_tot", "Daily or Total Numbers", c("Daily" = "Daily", "Total" = "Total" )),
+          shiny::selectInput( "absolute_scaled","Absolute or Scaled Values",c("Absolute Number" = "actual", "Per 100K" = "scaled") ),
+         shiny::selectInput("xscale", "Set x-axis to Calendar Date or Days since a specified total number of cases", c("Calendar Date" = "x_time", "Days Since X Cases" = "x_count")),
+          sliderInput(  inputId = "count_limit", "Choose the Total Number of Cases at which to start graphs", min = 1,  max = 500, value = 10 ),
           shiny::selectInput(  "yscale", "Y-scale", c("Linear" = "linear", "Logarithmic" = "logarithmic"))
           ),         #end sidebar panel
         # Output:
