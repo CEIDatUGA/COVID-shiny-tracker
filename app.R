@@ -295,12 +295,22 @@ server <- function(input, output, session) {
                 #Country selector coding with US, Italy, and Spain as always selected for a defult setting, will flash an error with none selected
                 shinyWidgets::pickerInput("country_selector", "Select countries", country_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("US", "Italy", "Spain")                        ),
                 shiny::selectInput( "case_death_w", "Outcome", c("Cases" = "Cases", "Deaths" = "Deaths")),
+                shiny::div("Modify the plot to display cases or deaths."),
+                br(),
                 shiny::selectInput("daily_tot_w", "Daily or cumulative numbers", c("Daily" = "Daily", "Total" = "Total")),
+                shiny::div("Modify the plot to reflect daily or cumulative statistics."),
+                br(),
                 shiny::selectInput("absolute_scaled_w", "Absolute or scaled values", c("Absolute Number" = "actual", "Per 100,000 persons" = "scaled") ),
+                shiny::div("Modify the plot to display statistics representive of the total count or values scaled to the country population size."),
+                br(),
                 shiny::selectInput( "xscale_w", "Set x-axis to calendar date or days since a specified total number of cases/deaths", c("Calendar Date" = "x_time", "Days since N cases/deaths" = "x_count")),
                 sliderInput( inputId = "count_limit_w","Choose the number of cases/deaths at which to start graphs", min = 1,  max = 500,  value = 10 ),
-                shiny::selectInput( "yscale_w",  "Y-scale", c("Linear" = "identity", "Logarithmic" = "log10"))
-              ),
+                shiny::div("Modify the plot to reflect the calender date or days since a selected value of cases input in the slider above."),
+                br(),
+                shiny::selectInput( "yscale_w",  "Y-scale", c("Linear" = "identity", "Logarithmic" = "log10")),
+                shiny::div("Modify the plot to reflect a logarithmic or linear scale."),
+                br(),
+                ),
               
               mainPanel(
                 plotlyOutput(outputId = "case_death_plot_world", height = "500px"),
@@ -327,12 +337,23 @@ server <- function(input, output, session) {
         sidebarPanel(
           shinyWidgets::pickerInput("state_selector", "Select states", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("CA", "WA", "GA") ),
           shiny::selectInput( "case_death",   "Outcome",c("Cases" = "Cases", "Deaths" = "Deaths", "Hospitalizations" = "Hospitalized")),
+          shiny::div("Modify the top plot to display cases, deaths, or hospitalizations."),
+          br(),
           shiny::selectInput("daily_tot", "Daily or cumulative numbers", c("Daily" = "Daily", "Total" = "Total" )),
+          shiny::div("Modify all three plots to reflect daily or cumulative statistics."),
+          br(),
           shiny::selectInput( "absolute_scaled","Absolute or scaled values",c("Absolute Number" = "actual", "Per 100,000 persons" = "scaled") ),
-         shiny::selectInput("xscale", "Set x-axis to calendar date or days since a specified total number of cases/hospitalizations/deaths", c("Calendar Date" = "x_time", "Days since N cases/hospitalizations/deaths" = "x_count")),
+          shiny::div("Modify all three plots to display statistics representive of the total count or values scaled to the state/territory population size."),
+          br(),
+          shiny::selectInput("xscale", "Set x-axis to calendar date or days since a specified total number of cases/hospitalizations/deaths", c("Calendar Date" = "x_time", "Days since N cases/hospitalizations/deaths" = "x_count")),
           sliderInput(  inputId = "count_limit", "Choose the number of cases/hospitalizations/deaths at which to start graphs", min = 1,  max = 500, value = 10 ),
-          shiny::selectInput(  "yscale", "Y-scale", c("Linear" = "identity", "Logarithmic" = "log10"))
-          ),         #end sidebar panel
+          shiny::div("Modify all three plots to reflect the calender date or days since a selected value of cases input in the slider above."),
+          br(),
+          shiny::selectInput(  "yscale", "Y-scale", c("Linear" = "identity", "Logarithmic" = "log10")),
+          shiny::div("Modify the top two plots to reflect a logarithmic or linear scale."),
+          br(),
+
+         ),         #end sidebar panel
         # Output:
         mainPanel(
           #change to plotOutput if using static ggplot object
