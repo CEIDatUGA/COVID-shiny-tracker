@@ -47,9 +47,7 @@ if (file.exists('us_cleandata.rds') && as.Date(file.mtime('us_cleandata.rds')) =
               Total_Cases = positive, Total_Hospitalized = hospitalized, 
               Total_Test_Negative = negative, Total_Test_Positive = positive, Total_Test_All = total) %>%
         mutate(Daily_Cases = Daily_Test_Positive, Total_Cases = Total_Test_Positive)
-    #Change NA hospitalizations to zero
-     us_clean$Total_Hospitalized[is.na(us_clean$Total_Hospitalized)] <- 0
-     us_clean$Daily_Hospitalized[is.na(us_clean$Daily_Hospitalized)] <- 0
+
     
     saveRDS(us_clean,'us_cleandata.rds')
 }
