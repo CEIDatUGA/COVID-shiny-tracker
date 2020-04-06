@@ -117,8 +117,10 @@ table td {
 #bigtext
 {
 	color: #black;
-	text-align: center;
-	font-size: 130%;
+	text-align: left;
+	font-size: 120%;
+	padding-left: 20px;
+	padding-right: 20px;
 	padding-top: 10px;
 	padding-bottom: 10px;
 }

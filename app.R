@@ -101,69 +101,18 @@ country_var = unique(world_clean$Location)
 ui <- fluidPage(
   tags$head(includeHTML(("google-analytics.html"))), #this is for Google analytics tracking.
   includeCSS("appstyle.css"),
-    fluidRow( #all of this is the header
-              tags$div(id = "shinyheadertitle", "YACT - Yet Another COVID-19 Tracker"),
-               #the style 'shinyheadertitle' is defined in the appstyle.css file
-               tags$div(
-                   id = "bigtext",
-                   "This tracker is brought to you by the",
-                   a("Center for the Ecology of Infectious Diseases",  href = "https://ceid.uga.edu", target = "_blank" ),
-                   "and the",
-                   a("College of Public Health", href = "https://publichealth.uga.edu", target = "_blank"),
-                   "at the",
-                   a("University of Georgia.", href = "https://www.uga.edu", target = "_blank"),
-                   "It was developed by",
-                   a("Robbie Richards,", href = "https://rlrichards.github.io", target =  "_blank"),
-                   a("William Norfolk", href = "https://github.com/williamnorfolk", target = "_blank"),
-                   "and ",
-                   a("Andreas Handel.", href = "https://www.andreashandel.com/", target = "_blank"),
-                   "Underlying data for the US is sourced from",
-                   a("The Covid Tracking Project,",  href = "https://covidtracking.com/", target = "_blank" ),
-                   "world data is sourced from the",
-                   a("Johns Hopkins University Center for Systems Science and Engineering.", href = "https://github.com/CSSEGISandData/COVID-19", target = "_blank" ),
-                   'Source code for this project can be found',
-                   a( "in this GitHub repository.", href = "https://github.com/CEIDatUGA/COVID-shiny-tracker", target = "_blank" ),
-                   'We welcome feedback and feature requests, please send them as a',
-                   a( "GitHub Issue", href = "https://github.com/CEIDatUGA/COVID-shiny-tracker/issues", target = "_blank" ),
-                   'or contact',
-                   a("Andreas Handel.", href = "https://www.andreashandel.com/", target = "_blank")
-               ), #Close the bigtext text div
-               tags$div( id = "bigtext",
-                   a( "The Center for the Ecology of Infectious Diseases", href = "https://ceid.uga.edu", target = "_blank" ),
-                   'has several additional projects related to COVID-19, which can be found on the',
-                   a( "CEID Coronavirus tracker website.", href = "http://2019-coronavirus-tracker.com/", target = "_blank" )
-               ) #Close the bigtext text div
-    ), #closes header fluid row
     #main tabs
-    navbarPage( title = "YACT", id = 'alltabs', selected = "us",
+    navbarPage( title = "YACT - Yet Another COVID-19 Tracker", id = 'alltabs', selected = "us", header = "",
         tabPanel(  title = "US", value = "us",
-                 fluidRow( uiOutput('us_ui'), class = "mainmenurow" )
-              ), #close US tab
+                  fluidRow( uiOutput('us_ui'), class = "mainmenurow" )
+                ), #close US tab
         tabPanel( title = "World", value = "world",
-              fluidRow( uiOutput('world_ui'), class = "mainmenurow" )
-              ) #close world tab
-     ),     #close NavBarPage
-  br(),
-  fluidRow( #all of this is the footer
-      column(2,
-             a(href = "https://ceid.uga.edu", tags$img(src = "ceidlogo.png", width = "100%"), target = "_blank"),
-            ),
-      column(8,
-             p('All text and figures are licensed under a ',
-               a("Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.",
-                 href = "http://creativecommons.org/licenses/by-nc-sa/4.0/", target = "_blank"),
-               'Software/Code is licensed under ',
-               a("GPL-3.", href = "https://www.gnu.org/licenses/gpl-3.0.en.html" , target =  "_blank"),
-               'See source data sites for licenses governing data.',
-               a("UGA's Privacy Policy.", href = "https://eits.uga.edu/access_and_security/infosec/pols_regs/policies/privacy/" , target =  "_blank"),
-               align = "center",
-               style = "font-size:small"
-             ) #end paragraph
-      ), #end middle column
-      column(2,
-             a(href = "https://publichealth.uga.edu", tags$img(src = "cphlogo.png", width = "100%"), target = "_blank")
-      ) #end left column
-    ) #end fluidrow
+                  fluidRow( uiOutput('world_ui'), class = "mainmenurow" )
+                ), #close world tab
+        tabPanel( title = "About", value = "about",
+                  fluidRow( uiOutput('about_ui'), class = "mainmenurow" )
+                ) #close about tab
+          ) #close NavBarPage
 ) #end fluidpage and UI part of shiny app
 #end UI of shiny app
 ###########################################
@@ -401,6 +350,69 @@ server <- function(input, output, session) {
     
   }) #end observer listening to US tab choice
 
+  
+  ###########################################
+  #function that checks if about tab is selected and generates UI
+  ###########################################
+  observeEvent( input$alltabs == 'about', 
+  {
+    output$about_ui <- renderUI({
+      tagList(    
+      fluidRow( #all of this is the header
+            #tags$div(id = "shinyheadertitle", "YACT - Yet Another COVID-19 Tracker"),
+            #the style 'shinyheadertitle' is defined in the appstyle.css file
+            tags$div(
+              id = "bigtext",
+              "This COVID-19 tracker is brought to you by the",
+              a("Center for the Ecology of Infectious Diseases",  href = "https://ceid.uga.edu", target = "_blank" ),
+              "and the",
+              a("College of Public Health", href = "https://publichealth.uga.edu", target = "_blank"),
+              "at the",
+              a("University of Georgia.", href = "https://www.uga.edu", target = "_blank"),
+              "It was developed by",
+              a("Robbie Richards,", href = "https://rlrichards.github.io", target =  "_blank"),
+              a("William Norfolk", href = "https://github.com/williamnorfolk", target = "_blank"),
+              "and ",
+              a("Andreas Handel.", href = "https://www.andreashandel.com/", target = "_blank"),
+              "Underlying data for the US is sourced from",
+              a("The Covid Tracking Project,",  href = "https://covidtracking.com/", target = "_blank" ),
+              "world data is sourced from the",
+              a("Johns Hopkins University Center for Systems Science and Engineering.", href = "https://github.com/CSSEGISandData/COVID-19", target = "_blank" ),
+              'Source code for this project can be found',
+              a( "in this GitHub repository.", href = "https://github.com/CEIDatUGA/COVID-shiny-tracker", target = "_blank" ),
+              'We welcome feedback and feature requests, please send them as a',
+              a( "GitHub Issue", href = "https://github.com/CEIDatUGA/COVID-shiny-tracker/issues", target = "_blank" ),
+              'or contact',
+              a("Andreas Handel.", href = "https://www.andreashandel.com/", target = "_blank"),
+              a( "The Center for the Ecology of Infectious Diseases", href = "https://ceid.uga.edu", target = "_blank" ),
+              'has several additional projects related to COVID-19, which can be found on the',
+              a( "CEID Coronavirus tracker website.", href = "http://2019-coronavirus-tracker.com/", target = "_blank" )
+            ), #Close the bigtext text div
+          ), #close fluidrow
+          fluidRow( #all of this is the footer
+              column(3,
+                     a(href = "https://ceid.uga.edu", tags$img(src = "ceidlogo.png", width = "100%"), target = "_blank"),
+              ),
+              column(6,
+                     p('All text and figures are licensed under a ',
+                       a("Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.",
+                         href = "http://creativecommons.org/licenses/by-nc-sa/4.0/", target = "_blank"),
+                       'Software/Code is licensed under ',
+                       a("GPL-3.", href = "https://www.gnu.org/licenses/gpl-3.0.en.html" , target =  "_blank"),
+                       'See source data sites for licenses governing data.',
+                       a("UGA's Privacy Policy.", href = "https://eits.uga.edu/access_and_security/infosec/pols_regs/policies/privacy/" , target =  "_blank"),
+                       align = "center",
+                       style = "font-size:small"
+                     ) #end paragraph
+              ), #end middle column
+              column(3,
+                     a(href = "https://publichealth.uga.edu", tags$img(src = "cphlogo.png", width = "100%"), target = "_blank")
+              ) #end left column
+            ) #end fluidrow
+      ) #end taglist
+    }) #end renderUI 
+    }) #end observer listening to about tab choice
+        
 
 } #end server function
 
