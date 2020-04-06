@@ -204,7 +204,7 @@ server <- function(input, output, session) {
     y_labels <- paste(daily_tot, c("Cases", "Tests", "Positive Test Proportion"), sep = " ")
     
     tool_tip <- c("Date","Cases", "Tests", "Positive Test Proportion")
-    tool_tip[2] <- case_death #fill that automatically with either Case/Hosp/Death
+  tool_tip[2] <- case_death #fill that automatically with either Case/Hosp/Death
     
     #adjust data to align for plotting by cases on x-axis. 
     if (xscale == 'x_count')
@@ -325,7 +325,8 @@ server <- function(input, output, session) {
       #make data for plotting
       plot_dat <- set_outcome(us_clean,input$case_death,input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs)
       #create plot
-      pl <- make_plot(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale)
+      pl <- make_plot(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale) +
+       ylab(plot_dat[[2]][[1]])
       ggplotly(pl, tooltip = "text") 
     }) #end function making case/deaths plot
     
@@ -335,7 +336,8 @@ server <- function(input, output, session) {
       plot_dat <- set_outcome(us_clean,input$case_death,input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs)
       #create plot
       plot_dat[[1]] <- plot_dat[[1]] %>% select(-outcome) %>% rename(outcome = test_outcome)
-      pl <- make_plot(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale)
+      pl <- make_plot(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale) +
+       ylab(plot_dat[[2]][2])
       ggplotly(pl, tooltip = "text") 
     }) #end function making testing plot
     
@@ -345,7 +347,8 @@ server <- function(input, output, session) {
       plot_dat <- set_outcome(us_clean,input$case_death,input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs)
       #create plot
       plot_dat[[1]] <- plot_dat[[1]] %>% select(-outcome) %>% rename(outcome = test_frac_outcome)
-      pl <- make_plot(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale)
+      pl <- make_plot(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale) +
+       ylab(plot_dat[[2]][3])
       ggplotly(pl, tooltip = "text") 
     }) #end function making testing plot
     
