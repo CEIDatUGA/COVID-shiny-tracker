@@ -251,7 +251,7 @@ server <- function(input, output, session) {
     if (yscale == "log10") {ytrans = "log"} #plotly uses different names for linear/log scale
     if (yscale == "identity") {ytrans = "lin"} #plotly uses different names for linear/log scale
     linesize = 2
-    tooltip_text = paste(paste0("Location: ", plot_dat$Location), paste0(tool_tip[1], ": ", plot_dat$Date),paste0(tool_tip[2],": ", plot_dat$outcome),sep ="\n") 
+    tooltip_text = paste(paste0("Location: ", plot_dat$Location), paste0(tool_tip[1], ": ", plot_dat$Date),paste0(tool_tip[ylabel+1],": ", plot_dat$outcome),sep ="\n") 
     pl <- plot_dat %>%
           plotly::plot_ly() %>%  
           add_trace(x = ~Time, y = ~outcome, type = 'scatter', mode = 'lines+markers', linetype = ~Location, 
@@ -351,7 +351,7 @@ server <- function(input, output, session) {
       #make data for plotting
       plot_dat <- set_outcome(us_clean,input$case_death,input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs,input$state_selector)
       #create plot
-      pl <- make_plotly(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 3)
+      pl <- make_plotly(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 1)
       #pl <- make_plot(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 1) 
     }) #end function making case/deaths plot
     
@@ -362,7 +362,7 @@ server <- function(input, output, session) {
       #re-assign outcome
       plot_dat[[1]] <- plot_dat[[1]] %>% select(-outcome) %>% rename(outcome = test_outcome)
       #create plot
-      pl <- make_plotly(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 3)
+      pl <- make_plotly(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 2)
       #pl <- make_plot(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 2) 
     }) #end function making testing plot
     
