@@ -112,7 +112,7 @@ ui <- fluidPage(
                    "at the",
                    a("University of Georgia.", href = "https://www.uga.edu", target = "_blank"),
                    "It was developed by",
-                   a("Robbie Richards,", href = "https://github.com/rlrichards", target =  "_blank"),
+                   a("Robbie Richards,", href = "https://rlrichards.github.io", target =  "_blank"),
                    a("William Norfolk", href = "https://github.com/williamnorfolk", target = "_blank"),
                    "and ",
                    a("Andreas Handel.", href = "https://www.andreashandel.com/", target = "_blank"),
@@ -286,7 +286,7 @@ server <- function(input, output, session) {
           #make data for plotting
           plot_dat <- set_outcome(world_clean,input$case_death_w,input$daily_tot_w,input$absolute_scaled_w,input$xscale_w,input$count_limit_w,input$alltabs)
           #create plot
-          pl <- make_plot(plot_dat, input$country_selector, input$xscale_w, input$yscale_w)
+          pl <- make_plot(plot_dat, location_selector = input$country_selector, yscale = input$yscale_w, xscale = input$xscale_w)
           ggplotly(pl, tooltip = "text") 
         }) #end function making case/deaths plot          
     }) #end world observe event 
@@ -325,7 +325,7 @@ server <- function(input, output, session) {
       #make data for plotting
       plot_dat <- set_outcome(us_clean,input$case_death,input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs)
       #create plot
-      pl <- make_plot(plot_dat, input$state_selector, input$xscale, input$yscale)
+      pl <- make_plot(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale_w)
       ggplotly(pl, tooltip = "text") 
     }) #end function making case/deaths plot
     
@@ -335,7 +335,7 @@ server <- function(input, output, session) {
       plot_dat <- set_outcome(us_clean,input$case_death,input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs)
       #create plot
       plot_dat[[1]] <- plot_dat[[1]] %>% select(-outcome) %>% rename(outcome = test_outcome)
-      pl <- make_plot(plot_dat, input$state_selector, input$xscale, input$yscale)
+      pl <- make_plot(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale)
       ggplotly(pl, tooltip = "text") 
     }) #end function making testing plot
     
@@ -345,7 +345,7 @@ server <- function(input, output, session) {
       plot_dat <- set_outcome(us_clean,input$case_death,input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs)
       #create plot
       plot_dat[[1]] <- plot_dat[[1]] %>% select(-outcome) %>% rename(outcome = test_frac_outcome)
-      pl <- make_plot(plot_dat, input$state_selector, input$xscale, input$yscale)
+      pl <- make_plot(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale)
       ggplotly(pl, tooltip = "text") 
     }) #end function making testing plot
     
