@@ -325,7 +325,7 @@ server <- function(input, output, session) {
       #make data for plotting
       plot_dat <- set_outcome(us_clean,input$case_death,input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs)
       #create plot
-      pl <- make_plot(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale_w)
+      pl <- make_plot(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale)
       ggplotly(pl, tooltip = "text") 
     }) #end function making case/deaths plot
     
