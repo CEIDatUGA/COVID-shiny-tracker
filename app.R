@@ -341,7 +341,7 @@ server <- function(input, output, session) {
       #re-assign outcome
       plot_dat[[1]] <- plot_dat[[1]] %>% select(-outcome) %>% rename(outcome = test_frac_outcome)
       #create plot
-      pl <- make_plotly(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 3)
+      pl <- make_plotly(plot_dat, location_selector = input$state_selector, yscale = "identity", xscale = input$xscale, ylabel = 3)
       #pl <- make_plot(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 3)
     }) #end function making testing plot
     
