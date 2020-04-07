@@ -372,16 +372,22 @@ server <- function(input, output, session) {
               a("William Norfolk", href = "https://github.com/williamnorfolk", target = "_blank"),
               "and ",
               a("Andreas Handel.", href = "https://www.andreashandel.com/", target = "_blank"),
-              "Underlying data for the US is sourced from",
-              a("The Covid Tracking Project,",  href = "https://covidtracking.com/", target = "_blank" ),
-              "world data is sourced from the",
-              a("Johns Hopkins University Center for Systems Science and Engineering.", href = "https://github.com/CSSEGISandData/COVID-19", target = "_blank" ),
               'Source code for this project can be found',
               a( "in this GitHub repository.", href = "https://github.com/CEIDatUGA/COVID-shiny-tracker", target = "_blank" ),
               'We welcome feedback and feature requests, please send them as a',
               a( "GitHub Issue", href = "https://github.com/CEIDatUGA/COVID-shiny-tracker/issues", target = "_blank" ),
-              'or contact',
-              a("Andreas Handel.", href = "https://www.andreashandel.com/", target = "_blank"),
+              'or contact Andreas Handel.'
+              ),# and tag
+            tags$div(
+              id = "bigtext",
+              "Underlying data for the US is sourced from",
+              a("The Covid Tracking Project.",  href = "https://covidtracking.com/", target = "_blank" ),
+              "This data source reports all and positive tests, hospitalizations and deaths for each state. We interpret positive tests as corresponding to new cases. For more details on the data, see the Covid Tracking Project website. World data is sourced from the",
+              a("Johns Hopkins University Center for Systems Science and Engineering.", href = "https://github.com/CSSEGISandData/COVID-19", target = "_blank" ),
+              "See their website for more details on the data. Note that some data might not be fully reliable, which can lead to nonsensical graphs (e.g. the fraction of positive tests negative or greater than 1). We make no attempt at cleaning/fixing the data, only use it as provided by those two sources."
+            ),              
+            tags$div(
+              id = "bigtext",
               a( "The Center for the Ecology of Infectious Diseases", href = "https://ceid.uga.edu", target = "_blank" ),
               'has several additional projects related to COVID-19, which can be found on the',
               a( "CEID Coronavirus tracker website.", href = "http://2019-coronavirus-tracker.com/", target = "_blank" )
