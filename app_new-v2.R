@@ -290,7 +290,6 @@ server <- function(input, output, session) {
   set_outcome <- function(plot_dat,outcomevar,daily_tot,absolute_scaled,xscale,count_limit,selected_tab,location_selector,nytdata)
   {
     
-    
     #adjust data to align for plotting by cases on x-axis. 
     #need to do before filtering since we use totals to adjust
     if (xscale == 'x_count' && outcomevar %in% c("Cases","Hospitalizations","Deaths"))
@@ -298,14 +297,14 @@ server <- function(input, output, session) {
       #Takes plot_dat and filters numbers by the predetermined count limit from the reactive above
       #Created the time variable (which represents the day number of the outbreak) from the date variable
       #Will plot the number of days since the selected count_limit or the date
-      
-      plot_dat <- plot_dat %>% 
-        dplyr::group_by(Location) %>% 
+
+      plot_dat <- plot_dat %>%
+        dplyr::group_by(Location) %>%
         dplyr::mutate(Time = as.numeric(Date)) %>%
-        
-        dplyr::filter(value >= count_limit) %>%  
-        
-        
+
+        dplyr::filter(value >= count_limit) %>%
+
+
         dplyr::mutate(Time = Time - min(Time))
     }
     else
@@ -348,27 +347,26 @@ server <- function(input, output, session) {
     # if (nytimes == "Yes" && ( outtype == "Cases" || outtype == "Deaths") && outname == "outcome")  #add NYT lines to case/death plot
     # {
     #   p_dat <- dplyr::filter(plot_dat,source == 'Covid Tracker')
-    #   tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0(tool_tip[1], ": ", p_dat$Date), paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
-    #   pl1 <- plotly::plot_ly(p_dat) 
+    #   tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0(tool_tip[1], ": ", p_dat$Date), paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n")
+    #   pl1 <- plotly::plot_ly(p_dat)
     #   pl2 <- plotly::add_trace(pl1, data = p_dat,
     #                            x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', color = ~Location,
-    #                            line = list( width = linesize), text = tooltip_text) 
-    #   
+    #                            line = list( width = linesize), text = tooltip_text)
+    # 
     #   p_dat <- dplyr::filter(plot_dat,source == 'NY Times')
-    #   tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0(tool_tip[1], ": ", p_dat$Date), paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
+    #   tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0(tool_tip[1], ": ", p_dat$Date), paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n")
     #   pl3 <- plotly::add_trace(pl2, data = p_dat,
     #                            x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', color = ~Location,
     #                            line = list(dash = "dash", width = linesize), text = tooltip_text) %>%
-    #                   layout(yaxis = list(title=plot_list[[2]][ylabel], type = ytrans, size = 18)) 
+    #                   layout(yaxis = list(title=plot_list[[2]][ylabel], type = ytrans, size = 18))
     #   pl <- pl3
-    # } else {
+    #} else {
       p_dat <- plot_dat
-      #tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0(tool_tip[1], ": ", p_dat$Date), paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
-      tooltip_text = "hello"
+      #tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0("Date: ", ": ", p_dat$Date), paste0(p_dat$outcome,": ", p_dat$value), sep ="\n") 
       pl <- plotly::plot_ly(p_dat) %>%  
            add_trace(x = ~Time, y = ~value, type = 'scatter', mode = 'lines+markers', linetype = ~Location, 
-                    line = list(color = ~Location, width = linesize), text = tooltip_text) %>%
-          layout(  yaxis = list(title=~outcome, type = yscale, size = 18)) 
+                    line = list(color = ~Location, width = linesize)) %>%
+          layout(  yaxis = list(title=unique(p_dat$outcome), type = yscale, size = 18)) 
     #}
     return(pl)
   }
