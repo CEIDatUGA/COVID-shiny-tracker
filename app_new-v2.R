@@ -36,21 +36,28 @@ if (file.exists(filename_us_data)) {
     us_data <- read_csv("https://covidtracking.com/api/states/daily.csv")
     #data for population size for each state/country so we can compute cases per 100K
     us_popsize <- readRDS("us_popsize.rds")
-    us_clean <- us_data %>% dplyr::select(c(date,state,positive,negative,total,hospitalized,death)) %>%
+    us_clean <- us_data %>% dplyr::select(c(date,state,positive,total,hospitalized,death)) %>%
         mutate(date = as.Date(as.character(date),format="%Y%m%d")) %>% 
         group_by(state) %>% arrange(date) %>%
         mutate(Daily_Test_Positive = c(0,diff(positive))) %>% 
-        mutate(Daily_Test_Negative = c(0,diff(negative))) %>% 
         mutate(Daily_Test_All = c(0,diff(total))) %>% 
         mutate(Daily_Hospitalized = c(0,diff(hospitalized))) %>% 
         mutate(Daily_Deaths = c(0,diff(death))) %>%
-        merge(us_popsize) %>%
+        merge(us_popsize) %>% select(-state) %>%
         rename(Date = date, Location = state_full, Population_Size = total_pop, Total_Deaths = death, 
               Total_Cases = positive, Total_Hospitalized = hospitalized, 
-              Total_Test_Negative = negative, Total_Test_Positive = positive, Total_Test_All = total) %>%
-        mutate(Daily_Cases = Daily_Test_Positive, Total_Cases = Total_Test_Positive)
+             Total_Test_Positive = positive, Total_Test_All = total) %>%
+      mutate(Daily_Test_Positive_Frac = Daily_Test_Positive/Daily_Test_All) %>%
+      mutate(Total_Test_Positive_Frac = Total_Test_Positive/Total_Test_All) %>% 
+      mutate(Daily_Cases = Daily_Test_Positive, Total_Cases = Total_Test_Positive) %>% select(-c(Daily_Test_Positive,Total_Test_Positive))
+    
+    us_clean <- us_clean %>% pivot_longer( cols = -c(Date,Population_Size,Location), names_to = "outcome", values_to = "value" ) %>% mutate(source = 'covidtracker')
+    
     saveRDS(us_clean,filename_us_data) #save clean file for loading unless it's outdated
 }
+
+
+
 
 #################################
 #US data from NY Times
@@ -75,12 +82,15 @@ if (file.exists(filename_us_nyt)) {
     mutate(Daily_Deaths = c(0,diff(deaths))) %>%
     merge(us_popsize) %>%
     rename(Date = date, Location = state, Population_Size = total_pop, Total_Deaths = deaths, 
-           Total_Cases = cases)
+           Total_Cases = cases) 
   
+  us_nyt_clean <- us_nyt_clean %>% pivot_longer( cols = -c(Date,Population_Size,Location), names_to = "outcome", values_to = "value" ) %>% 
+                                    mutate(source = 'nytimes') %>% 
+                                  select(Date, everything())
   saveRDS(us_nyt_clean,filename_us_nyt)
 }
 
-
+all_us_clean = rbind(us_clean,us_nyt_clean)
 
 #################################
 #Pull and clean world data
@@ -118,11 +128,14 @@ if (file.exists(filename_world)) {
         rename(Date = date, Total_Deaths = deaths, Total_Cases = cases, Location = country, Population_Size = country_pop) %>% 
         data.frame()
     
+    world_clean <- world_clean %>% pivot_longer( cols = -c(Date,Population_Size,Location), names_to = "outcome", values_to = "value" ) %>% mutate(source = 'jhu')
+
     saveRDS(world_clean,filename_world)
 }
 
-state_var = unique(us_clean$Location)
+state_var = unique(all_us_clean$Location)
 country_var = unique(world_clean$Location)
+
 
 #################################
 # Define UI
@@ -155,7 +168,7 @@ ui <- fluidPage(
                      sliderInput(  inputId = "count_limit", "Choose the number of cases/hospitalizations/deaths at which to start graphs", min = 1,  max = 500, value = 10 ),
                      shiny::div("Modify all three plots to show data with x-axis as calender date or days since a state reported a specified total number of cases/hospitalizations/deaths, specified by the slider above. The slider above does not have an impact for calendar date on the x-axis."),
                      br(),
-                     shiny::selectInput(  "yscale", "Y-scale", c("Linear" = "identity", "Logarithmic" = "log10")),
+                     shiny::selectInput(  "yscale", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
                      shiny::div("Modify the top two plots to show data on a linear or logarithmic scale."),
                      br(),
                    ),         #end sidebar panel
@@ -189,7 +202,7 @@ ui <- fluidPage(
                           sliderInput(  inputId = "count_limit_w", "Choose the number of cases/deaths at which to start graphs", min = 1,  max = 500, value = 10 ),
                           shiny::div("Modify all the plot to show data with x-axis as calender date or days since a country reported a specified total number of cases/deaths, specified by the slider above. The slider above does not have an impact for calendar date on the x-axis."),
                           br(),
-                          shiny::selectInput(  "yscale_w", "Y-scale", c("Linear" = "identity", "Logarithmic" = "log10")),
+                          shiny::selectInput(  "yscale_w", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
                           shiny::div("Modify the plot to show data on a linear or logarithmic scale."),
                           br()
                         ), #end sidebar panel
@@ -274,156 +287,134 @@ server <- function(input, output, session) {
   ###########################################
   # function that takes UI settings and produces data for each plot
   ###########################################
-  set_outcome <- function(plot_dat,case_death,daily_tot,absolute_scaled,xscale,count_limit,selected_tab,location_selector)
+  set_outcome <- function(plot_dat,outcomevar,daily_tot,absolute_scaled,xscale,count_limit,selected_tab,location_selector,nytdata)
   {
-    out_type = paste(daily_tot,case_death,sep='_') #make string from UI inputs that correspond with variable names
-    plot_dat <- plot_dat %>%   filter(Location %in% location_selector) %>%      #Only process data for locations that are  selected
-                               mutate(outcome = get(out_type)) #pick output based on variable name created from UI
-    # do testing data for US 
-    if (selected_tab == "us")  
-    {
-      test_out_type = paste(daily_tot,'Test_All',sep='_')
-      test_pos_type = paste(daily_tot,'Test_Positive',sep='_')
-      plot_dat <- plot_dat %>% mutate(test_outcome = get(test_out_type)) 
-      plot_dat <- plot_dat %>% mutate(test_frac_outcome = get(test_pos_type)/get(test_out_type))
-    }
     
-    #if we want scaling by 100K, do extra scaling 
-    if (absolute_scaled == 'scaled')
-    {
-      plot_dat <- plot_dat %>% mutate(outcome = outcome / Population_Size * 100000) 
-      if (selected_tab == "us" )  
-      {
-        plot_dat <- plot_dat %>%  mutate(test_outcome = test_outcome / Population_Size * 100000)
-      }
-    }
-    #set labels and tool tips based on input - entries 2 and 3 are ignored for world plot
-    y_labels <- c("Cases", "Tests", "Positive Test Proportion")
-    y_labels[1] <- case_death #fill that automatically with either Case/Hosp/Death
-    y_labels <- paste(daily_tot, y_labels, sep = " ")
-    
-    tool_tip <- c("Date", "Cases", "Tests", "Positive Test Proportion")
-    tool_tip[2] <- case_death #fill that automatically with either Case/Hosp/Death
     
     #adjust data to align for plotting by cases on x-axis. 
-    if (xscale == 'x_count')
+    #need to do before filtering since we use totals to adjust
+    if (xscale == 'x_count' && outcomevar %in% c("Cases","Hospitalizations","Deaths"))
     {
-      #Takes plot_dat and filters counts by the predetermined count limit from the reactive above
+      #Takes plot_dat and filters numbers by the predetermined count limit from the reactive above
       #Created the time variable (which represents the day number of the outbreak) from the date variable
       #Will plot the number of days since the selected count_limit or the date
       
-      out_type2 = paste0("Total_",case_death) #make string from UI inputs that correspond to total and selected outcome
       plot_dat <- plot_dat %>% 
-        filter(get(out_type2) >= count_limit) %>%  
-        mutate(Time = as.numeric(Date)) %>%
-        group_by(Location) %>% 
-        mutate(Time = Time - min(Time))
-      
+        dplyr::group_by(Location) %>% 
+        dplyr::mutate(Time = as.numeric(Date)) %>%
+        
+        dplyr::filter(value >= count_limit) %>%  
+        
+        
+        dplyr::mutate(Time = Time - min(Time))
     }
     else
     {
       plot_dat <- plot_dat %>% mutate(Time = Date)
     }
+    
+    
+    out_type = paste(daily_tot,outcomevar,sep='_') #make string from UI inputs that correspond with variable names
+    plot_dat <- plot_dat %>%   filter(Location %in% location_selector) %>%      #Only process data for locations that are  selected
+                               filter(outcome == out_type) #pick output based on variable name created from UI
+    if (nytdata == "No" && selected_tab == "us")
+    {
+      plot_dat <- plot_dat %>% filter(source == "covidtracker" ) #remove NYT data from US plots if not selected
+    }
+    #if we want scaling by 100K, do extra scaling 
+    if (absolute_scaled == 'scaled')
+    {
+      plot_dat <- plot_dat %>% mutate(value = value / Population_Size * 100000) 
+    }
+  
     #sort dates for plotting
     plot_dat <- plot_dat %>% group_by(Location) %>% arrange(Time) %>% ungroup()
     
-    list(plot_dat, y_labels, tool_tip) #return list
+    return(data.frame(plot_dat))
   } #end function that produces output for plots
   
   ###########################################
   # function that takes data generated by above function and makes plots
   # uses plotly
   ###########################################
-  make_plotly <- function(plot_list, location_selector, yscale, xscale, ylabel, outname, outtype, nytimes)
+  make_plotly <- function(plot_dat, yscale)
   {
-    tool_tip <- plot_list[[3]]
-    plot_dat <- data.frame(plot_list[[1]]) #need the extra data frame conversion from tibble to get tooltip_text line to work
     
-    if (yscale == "log10") {ytrans = "log"} #plotly uses different names for linear/log scale
-    if (yscale == "identity") {ytrans = "lin"} #plotly uses different names for linear/log scale
-    linesize = 2
-    if (nytimes == "Yes" && ( outtype == "Cases" || outtype == "Deaths") && outname == "outcome")  #add NYT lines to case/death plot
-    {
-      p_dat <- dplyr::filter(plot_dat,source == 'Covid Tracker')
-      tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0(tool_tip[1], ": ", p_dat$Date), paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
-      pl1 <- plotly::plot_ly(p_dat) 
-      pl2 <- plotly::add_trace(pl1, data = p_dat,
-                               x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', color = ~Location,
-                               line = list( width = linesize), text = tooltip_text) 
-      
-      p_dat <- dplyr::filter(plot_dat,source == 'NY Times')
-      tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0(tool_tip[1], ": ", p_dat$Date), paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
-      pl3 <- plotly::add_trace(pl2, data = p_dat,
-                               x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', color = ~Location,
-                               line = list(dash = "dash", width = linesize), text = tooltip_text) %>%
-                      layout(yaxis = list(title=plot_list[[2]][ylabel], type = ytrans, size = 18)) 
-      pl <- pl3
-    } else {
+    
+    #tool_tip <- plot_list[[3]]
+    #plot_dat <- data.frame(plot_list[[1]]) #need the extra data frame conversion from tibble to get tooltip_text line to work
+    
+   linesize = 2
+    # if (nytimes == "Yes" && ( outtype == "Cases" || outtype == "Deaths") && outname == "outcome")  #add NYT lines to case/death plot
+    # {
+    #   p_dat <- dplyr::filter(plot_dat,source == 'Covid Tracker')
+    #   tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0(tool_tip[1], ": ", p_dat$Date), paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
+    #   pl1 <- plotly::plot_ly(p_dat) 
+    #   pl2 <- plotly::add_trace(pl1, data = p_dat,
+    #                            x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', color = ~Location,
+    #                            line = list( width = linesize), text = tooltip_text) 
+    #   
+    #   p_dat <- dplyr::filter(plot_dat,source == 'NY Times')
+    #   tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0(tool_tip[1], ": ", p_dat$Date), paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
+    #   pl3 <- plotly::add_trace(pl2, data = p_dat,
+    #                            x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', color = ~Location,
+    #                            line = list(dash = "dash", width = linesize), text = tooltip_text) %>%
+    #                   layout(yaxis = list(title=plot_list[[2]][ylabel], type = ytrans, size = 18)) 
+    #   pl <- pl3
+    # } else {
       p_dat <- plot_dat
-      tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0(tool_tip[1], ": ", p_dat$Date), paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
+      #tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0(tool_tip[1], ": ", p_dat$Date), paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
+      tooltip_text = "hello"
       pl <- plotly::plot_ly(p_dat) %>%  
-           add_trace(x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', linetype = ~Location, 
+           add_trace(x = ~Time, y = ~value, type = 'scatter', mode = 'lines+markers', linetype = ~Location, 
                     line = list(color = ~Location, width = linesize), text = tooltip_text) %>%
-          layout(  yaxis = list(title=plot_list[[2]][ylabel], type = ytrans, size = 18)) 
-    }
+          layout(  yaxis = list(title=~outcome, type = yscale, size = 18)) 
+    #}
     return(pl)
   }
   
-   
-###########################################
-#function that checks if world tab is selected and generates UI
-###########################################
-  observeEvent( input$alltabs == 'world', 
-        {
-          # create data
-          plot_dat <- reactive({
-            set_outcome(world_clean,input$case_death_w,input$daily_tot_w,input$absolute_scaled_w,input$xscale_w,input$count_limit_w,input$alltabs,input$country_selector)
-          })
-          
-        #make the plot for cases/deaths for world data
-        output$case_death_plot_world <- renderPlotly({
-          #create plot
-          pl <- make_plotly(plot_dat(), location_selector = input$country_selector, yscale = input$yscale_w, xscale = input$xscale_w, ylabel = 1, outname = 'outcome', outtype = input$case_death, nytimes = "No")
-        }) #end function making case/deaths plot          
-    }) #end world observe event 
-      
+
   ###########################################
   #function that checks if us tab is selected 
   ###########################################
   observeEvent( input$alltabs == 'us', 
   {
-    #create data
-    plot_dat <- reactive({
-                  us_dat <- us_clean      
-                  if (input$nyt_data == "Yes") #add NYT data if selected
-                  {
-                    us_clean$source = "Covid Tracker"
-                    us_nyt_clean$source = "NY Times"
-                    us_dat <- dplyr::bind_rows(us_clean, us_nyt_clean)
-                  }
-                  set_outcome(us_dat,input$case_death,input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs,input$state_selector)
-                })
     
     #make the plot for cases/deaths for US data
     output$case_death_plot <- renderPlotly({
       #create plot
-      pl <- make_plotly(plot_dat(), location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 1, outname = 'outcome',outtype = input$case_death, nytimes = input$nyt_data)
+      plot_dat <- set_outcome(us_clean,outcomevar = input$case_death,input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs,input$state_selector, input$nyt_data)
+      pl <- make_plotly(plot_dat,  yscale = input$yscale)
     }) #end function making case/deaths plot
     
     #make the testing plot 
     output$testing_plot <- renderPlotly({
+      plot_dat <- set_outcome(us_clean,outcomevar = "Test_All",input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs,input$state_selector, input$nyt_data)
       #create plot
-      pl <- make_plotly(plot_dat(), location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 2, outname = 'test_outcome', outtype = input$case_death, nytimes = "No")
+      pl <- make_plotly(plot_dat,  yscale = input$yscale)
     }) #end function making testing plot
     
     #make the fraction positive testing plot 
     output$testing_frac_plot <- renderPlotly({
+      plot_dat <- set_outcome(us_clean,outcomevar = "Test_Positive_Frac",input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs,input$state_selector, input$nyt_data)
       #create plot
-      pl <- make_plotly(plot_dat(), location_selector = input$state_selector, yscale = "identity", xscale = input$xscale, ylabel = 3, outname = 'test_frac_outcome', outtype = input$case_death, nytimes = "No")
+      pl <- make_plotly(plot_dat,  yscale = input$yscale)
     }) #end function making testing plot
   }) #end observer listening to US tab choice
 
   
+  ###########################################
+  #function that checks if world tab is selected and generates UI
+  ###########################################
+  observeEvent( input$alltabs == 'world', 
+  {
+        #make the plot for cases/deaths for world data
+        output$case_death_plot_world <- renderPlotly({
+          plot_dat <- set_outcome(world_clean,input$case_death_w,input$daily_tot_w,input$absolute_scaled_w,input$xscale_w,input$count_limit_w,input$alltabs,input$country_selector,nytdata = "No")
+      #create plot
+          pl <- make_plotly(plot_dat,  yscale = input$yscale)
+        }) #end function making case/deaths plot          
+  }) #end world observe event 
  
 } #end server function
 
