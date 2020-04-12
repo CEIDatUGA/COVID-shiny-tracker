@@ -6,6 +6,7 @@ library(shiny)
 library(shinyWidgets)
 library(ggplot2)
 library(plotly)
+library(RColorBrewer)
 #library(scales)
 #library(shinythemes)
 #library(htmlwidgets)
@@ -352,7 +353,7 @@ server <- function(input, output, session) {
         p_dat <- plot_dat 
         tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0(tool_tip[1], ": ", p_dat$Date), paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
         pl <- plotly::plot_ly(p_dat) %>% plotly::add_trace(x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', color = ~Location, linetype = ~source,
-                                 line = list( width = linesize), text = tooltip_text) %>%
+                                 line = list( width = linesize), text = tooltip_text, colors = brewer.pal(12, "Dark2")) %>%
                                  layout(yaxis = list(title=plot_list[[2]][ylabel], type = yscale, size = 18)) 
      } else { #the other plots should not change
         p_dat <- plot_dat %>% filter(source == "covidtracker")
@@ -360,8 +361,8 @@ server <- function(input, output, session) {
         tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0(tool_tip[1], ": ", p_dat$Date), paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
         pl <- p_dat %>%
           plotly::plot_ly() %>%  
-          add_trace(x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', linetype = ~Location, 
-                    line = list(color = ~Location, width = linesize), text = tooltip_text) %>%
+          add_trace(x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', color = ~Location,linetype = ~Location, 
+                    line = list( width = linesize), text = tooltip_text, colors = brewer.pal(12, "Dark2")) %>%
           layout(  yaxis = list(title=plot_list[[2]][ylabel], type = yscale, size = 18)) 
       }
               
@@ -371,8 +372,8 @@ server <- function(input, output, session) {
       tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0(tool_tip[1], ": ", p_dat$Date), paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
       pl <- p_dat %>%
         plotly::plot_ly() %>%  
-        add_trace(x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', linetype = ~Location, 
-                  line = list(color = ~Location, width = linesize), text = tooltip_text) %>%
+        add_trace(x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', color = ~Location, linetype = ~Location, 
+                  line = list(width = linesize), text = tooltip_text,  colors = brewer.pal(12, "Dark2")) %>%
         layout(  yaxis = list(title=plot_list[[2]][ylabel], type = yscale, size = 18)) 
     }
     return(pl)
