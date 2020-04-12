@@ -6,6 +6,7 @@ library(shiny)
 library(shinyWidgets)
 library(ggplot2)
 library(plotly)
+library(RColorBrewer)
 #library(scales)
 #library(shinythemes)
 #library(htmlwidgets)
@@ -82,41 +83,53 @@ if (file.exists(filename_us_nyt)) {
   saveRDS(us_nyt_clean,filename_us_nyt)
 }
 
+
 #################################
 #US data from JHU
-# filename_us_jhu = paste0("us-jhu-cleandata-",Sys.Date(),'.rds')
-# if (file.exists(filename_us_jhu)) {
-   #################################
-   # load already clean data locally
-   #################################
-#   us_jhu_clean <- readRDS(filename_us_jhu)
-# } else {
-   #################################
-   # pull data from JHU github and process
-   #################################
-#   us_jhu_cases <- readr::read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv")
-#   us_jhu_deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv")
-   #Clean cases
-#   us_jhu_cases <- us_jhu_cases %>% filter(iso3 == "USA") %>%
-#     dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -FIPS, -Admin2, -Combined_Key)) %>%
-#   rename(Location = Province_State)
-#   us_jhu_cases <- aggregate(. ~ Location, us_jhu_cases, FUN = sum) 
-#   us_jhu_cases_clean <- gather(us_jhu_cases, Date, Cases, -Location)
-   #Clean deaths
-#   us_jhu_deaths <- us_jhu_deaths %>% filter(iso3 == "USA") %>%
-#     dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -FIPS, -Admin2, -Combined_Key, -Population)) %>%
-#     rename(Location = Province_State)
-#   us_jhu_deaths <- aggregate(. ~ Location, us_jhu_deaths, FUN = sum) 
-#   us_jhu_deaths_clean <- gather(us_jhu_deaths, Date, Deaths, -Location)
-#   us_jhu_combined <- merge(us_jhu_cases_clean, us_jhu_deaths_clean)
-#   us_jhu_combined$Location <- state.abb[match(us_jhu_combined$Location, state.name)]
-#   us_jhu_popsize <- us_popsize %>% rename(Location = state)
-   #This merge removes cruise ship cases/death counts
-#   us_jhu_clean <- merge(us_jhu_combined, us_jhu_popsize)
+filename_us_jhu = paste0("us-jhu-cleandata-",Sys.Date(),'.rds')
 
-#saveRDS(us_jhu_clean,filename_us_jhu)   
-  
-#   }
+#################################
+# load already clean data locally
+#################################
+ if (file.exists(filename_us_jhu)) {
+   us_jhu_clean <- readRDS(filename_us_jhu)
+ } else {
+  #################################
+  # pull data from JHU github and process
+  #################################
+   us_jhu_cases <- readr::read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv")
+   us_jhu_deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv")
+   #data for population size for each state/country so we can compute cases per 100K
+   us_popsize <- readRDS("us_popsize.rds") %>% select(-state) %>% rename(state = state_full)
+   # Clean cases
+   us_jhu_cases <- us_jhu_cases %>% filter(iso3 == "USA") %>%
+     dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -FIPS, -Admin2, -Combined_Key)) %>%
+   rename(Location = Province_State)
+   us_jhu_cases <- aggregate(. ~ Location, us_jhu_cases, FUN = sum)
+   us_jhu_cases_clean <- gather(us_jhu_cases, Date, Cases, -Location)
+  # Clean deaths
+   us_jhu_deaths <- us_jhu_deaths %>% filter(iso3 == "USA") %>%
+     dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -FIPS, -Admin2, -Combined_Key, -Population)) %>%
+     rename(Location = Province_State)
+   us_jhu_deaths <- aggregate(. ~ Location, us_jhu_deaths, FUN = sum)
+   us_jhu_deaths_clean <- gather(us_jhu_deaths, Date, Deaths, -Location)
+   us_jhu_combined <- merge(us_jhu_cases_clean, us_jhu_deaths_clean)
+   us_jhu_popsize <- us_popsize %>% rename(Location = state)
+# This merge removes cruise ship cases/death counts
+   us_jhu_merge <- merge(us_jhu_combined, us_jhu_popsize)
+   us_jhu_clean <- us_jhu_merge %>% mutate(Date = as.Date(as.character(Date),format="%m/%d/%y")) %>%
+     group_by(Location) %>% arrange(Date) %>%
+     mutate(Daily_Cases = c(0,diff(Cases))) %>%
+     mutate(Daily_Deaths = c(0,diff(Deaths))) %>% 
+     ungroup() %>%
+     rename(Total_Deaths = Deaths, Total_Cases = Cases, Population_Size = total_pop) %>% 
+     data.frame()
+   
+saveRDS(us_jhu_clean,filename_us_jhu)
+
+}
+
+
 
 #################################
 #Pull and clean world data
@@ -174,8 +187,8 @@ ui <- fluidPage(
                        sidebarLayout(
                          sidebarPanel(
                            shinyWidgets::pickerInput("state_selector", "Select states", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("Georgia","Florida") ),
-                           shiny::selectInput( "nyt_data", "Show NYT data",c("Yes" = "Yes", "No" = "No"), selected = "No"),
-                           shiny::div("Also show data from NY Times (cases and deaths only)."),
+                           shiny::selectInput( "otherdata", "Show NYT and JHU data",c("Yes" = "Yes", "No" = "No"), selected = "No"),
+                           shiny::div("Also show data from NY Times and JHU (cases and deaths only)."),
                            br(),
                            shiny::selectInput( "case_death",   "Outcome",c("Cases" = "Cases", "Hospitalizations" = "Hospitalized", "Deaths" = "Deaths")),
                            shiny::div("Modify the top plot to display cases, hospitalizations, or deaths."),
@@ -373,21 +386,21 @@ server <- function(input, output, session) {
   # function that takes data generated by above function and makes plots
   # uses plotly
   ###########################################
-  make_plotly <- function(plot_list, location_selector, yscale, xscale, ylabel, outname, nytdata)
+  make_plotly <- function(plot_list, location_selector, yscale, xscale, ylabel, outname, otherdata)
   {
     tool_tip <- plot_list[[3]]
     plot_dat <- data.frame(plot_list[[1]]) #need the extra data frame conversion from tibble to get tooltip_text line to work
     linesize = 2
     
     
-    if (nytdata == "Yes")
+    if (otherdata == "Yes")
     {
-      if ( ( tool_tip[2] == "Cases" || tool_tip[2] == "Deaths") && outname == "outcome" && ylabel == 1)  #add NYT lines to case/death plot
+      if ( ( tool_tip[2] == "Cases" || tool_tip[2] == "Deaths") && outname == "outcome" && ylabel == 1)  #add NYT and JHU lines to case/death plot
       {
         p_dat <- plot_dat 
         tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0(tool_tip[1], ": ", p_dat$Date), paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
         pl <- plotly::plot_ly(p_dat) %>% plotly::add_trace(x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', color = ~Location, linetype = ~source,
-                                 line = list( width = linesize), text = tooltip_text) %>%
+                                 line = list( width = linesize), text = tooltip_text, colors = brewer.pal(12, "Dark2")) %>%
                                  layout(yaxis = list(title=plot_list[[2]][ylabel], type = yscale, size = 18)) 
      } else { #the other plots should not change
         p_dat <- plot_dat %>% filter(source == "covidtracker")
@@ -395,19 +408,19 @@ server <- function(input, output, session) {
         tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0(tool_tip[1], ": ", p_dat$Date), paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
         pl <- p_dat %>%
           plotly::plot_ly() %>%  
-          add_trace(x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', linetype = ~Location, 
-                    line = list(color = ~Location, width = linesize), text = tooltip_text) %>%
+          add_trace(x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', color = ~Location,linetype = ~Location, 
+                    line = list( width = linesize), text = tooltip_text, colors = brewer.pal(12, "Dark2")) %>%
           layout(  yaxis = list(title=plot_list[[2]][ylabel], type = yscale, size = 18)) 
       }
               
-    } else #if nytdata is no, also no changes
+    } else #if otherdata is no, also no changes
     {
       p_dat <- plot_dat
       tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0(tool_tip[1], ": ", p_dat$Date), paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
       pl <- p_dat %>%
         plotly::plot_ly() %>%  
-        add_trace(x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', linetype = ~Location, 
-                  line = list(color = ~Location, width = linesize), text = tooltip_text) %>%
+        add_trace(x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', color = ~Location, linetype = ~Location, 
+                  line = list(width = linesize), text = tooltip_text,  colors = brewer.pal(12, "Dark2")) %>%
         layout(  yaxis = list(title=plot_list[[2]][ylabel], type = yscale, size = 18)) 
     }
     return(pl)
@@ -428,7 +441,7 @@ server <- function(input, output, session) {
         #make the plot for cases/deaths for world data
         output$case_death_plot_world <- renderPlotly({
           #create plot
-          pl <- make_plotly(plot_dat(), location_selector = input$country_selector, yscale = input$yscale_w, xscale = input$xscale_w, ylabel = 1, outname = 'outcome', nytdata = "No")
+          pl <- make_plotly(plot_dat(), location_selector = input$country_selector, yscale = input$yscale_w, xscale = input$xscale_w, ylabel = 1, outname = 'outcome', otherdata = "No")
         }) #end function making case/deaths plot          
     }) #end world observe event 
       
@@ -440,11 +453,12 @@ server <- function(input, output, session) {
     #create data
     plot_dat <- reactive({
       us_dat <- us_clean      
-      if (input$nyt_data == "Yes") #add NYT data if selected
+      if (input$otherdata == "Yes") #add NYT data if selected
       {
         us_clean$source = "covidtracker"
         us_nyt_clean$source = "nytimes"
-        us_dat <- dplyr::bind_rows(us_clean, us_nyt_clean)
+        us_jhu_clean$source = "jhu"
+        us_dat <- dplyr::bind_rows(us_clean, us_nyt_clean, us_jhu_clean)
       }
       set_outcome(us_dat,input$case_death,input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs,input$state_selector)
     })
@@ -457,21 +471,21 @@ server <- function(input, output, session) {
     #make the plot for cases/deaths for US data
     output$case_death_plot <- renderPlotly({
       #create plot
-      pl <- make_plotly(plot_dat(), location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 1, outname = 'outcome',nytdata = input$nyt_data)
+      pl <- make_plotly(plot_dat(), location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 1, outname = 'outcome',otherdata = input$otherdata)
       #pl <- make_plot(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 1) 
     }) #end function making case/deaths plot
     
     #make the testing plot 
     output$testing_plot <- renderPlotly({
       #create plot
-      pl <- make_plotly(plot_dat(), location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 2, outname = 'test_outcome',nytdata = input$nyt_data)
+      pl <- make_plotly(plot_dat(), location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 2, outname = 'test_outcome',otherdata = input$otherdata)
       #pl <- make_plot(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 2) 
     }) #end function making testing plot
     
     #make the fraction positive testing plot 
     output$testing_frac_plot <- renderPlotly({
       #create plot
-      pl <- make_plotly(plot_dat(), location_selector = input$state_selector, yscale = "identity", xscale = input$xscale, ylabel = 3, outname = 'test_frac_outcome',nytdata = input$nyt_data)
+      pl <- make_plotly(plot_dat(), location_selector = input$state_selector, yscale = "identity", xscale = input$xscale, ylabel = 3, outname = 'test_frac_outcome',otherdata = input$otherdata)
       #pl <- make_plot(plot_dat, location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 3)
     }) #end function making testing plot
     
