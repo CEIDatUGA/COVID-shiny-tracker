@@ -86,22 +86,36 @@ if (file.exists(filename_us_nyt)) {
 #US data from JHU
 # filename_us_jhu = paste0("us-jhu-cleandata-",Sys.Date(),'.rds')
 # if (file.exists(filename_us_jhu)) {
-#   #################################
-#   # load already clean data locally
-#   #################################
+   #################################
+   # load already clean data locally
+   #################################
 #   us_jhu_clean <- readRDS(filename_us_jhu)
 # } else {
-#   #################################
-#   # pull data from JHU github and process
-#   #################################
+   #################################
+   # pull data from JHU github and process
+   #################################
 #   us_jhu_cases <- readr::read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv")
 #   us_jhu_deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv")
-# 
-#   us_jhu_clean <- us_jhu_cases %>% filter(iso3 == "USA") %>%
-#                                    dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -FIPS, -Admin2, -Combined_Key)) %>%
-#                                    rename(Location = Province_State) %>%
-#                                    pivot_longer(-Location, names_to = "date", values_to = "cases")  
-# 
+   #Clean cases
+#   us_jhu_cases <- us_jhu_cases %>% filter(iso3 == "USA") %>%
+#     dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -FIPS, -Admin2, -Combined_Key)) %>%
+#   rename(Location = Province_State)
+#   us_jhu_cases <- aggregate(. ~ Location, us_jhu_cases, FUN = sum) 
+#   us_jhu_cases_clean <- gather(us_jhu_cases, Date, Cases, -Location)
+   #Clean deaths
+#   us_jhu_deaths <- us_jhu_deaths %>% filter(iso3 == "USA") %>%
+#     dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -FIPS, -Admin2, -Combined_Key, -Population)) %>%
+#     rename(Location = Province_State)
+#   us_jhu_deaths <- aggregate(. ~ Location, us_jhu_deaths, FUN = sum) 
+#   us_jhu_deaths_clean <- gather(us_jhu_deaths, Date, Deaths, -Location)
+#   us_jhu_combined <- merge(us_jhu_cases_clean, us_jhu_deaths_clean)
+#   us_jhu_combined$Location <- state.abb[match(us_jhu_combined$Location, state.name)]
+#   us_jhu_popsize <- us_popsize %>% rename(Location = state)
+   #This merge removes cruise ship cases/death counts
+#   us_jhu_clean <- merge(us_jhu_combined, us_jhu_popsize)
+
+#saveRDS(us_jhu_clean,filename_us_jhu)   
+  
 #   }
 
 #################################
