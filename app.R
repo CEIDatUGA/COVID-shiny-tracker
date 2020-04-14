@@ -174,7 +174,7 @@ state_var = unique(us_clean$Location)
 country_var = unique(world_clean$Location)
 
 
-browser()
+#browser()
 
 #################################
 # Define UI
