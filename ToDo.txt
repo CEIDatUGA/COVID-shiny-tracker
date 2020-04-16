@@ -1,5 +1,4 @@
 Things that could be done to improve app:
 
-* Fix all warning messages
 * further streamline code
 * add trend-lines and 1/2-week predictions based on simple smoothing/extrapolation
