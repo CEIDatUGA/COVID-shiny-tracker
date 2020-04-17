@@ -21,154 +21,157 @@ library(RColorBrewer)
 #for speed, we only get data from the online source if the data is old, otherwise we load locally
 #################################
 
-# to ensure data gets refreshed on server, we need this
+#################################
+#US data from https://covidtracking.com/
+filename_us_data = paste0("us-cleandata-",Sys.Date(),'.rds')
 
+if (file.exists(filename_us_data)) {
+  #################################
+  # load already clean data locally
+  #################################
+  us_clean <- readRDS(filename_us_data)
+} else {
+    #################################
+    # pull data from Covidtracking and process
+    #################################
+    us_data <- read_csv("https://covidtracking.com/api/states/daily.csv")
+    #data for population size for each state/country so we can compute cases per 100K
+    us_popsize <- readRDS("us_popsize.rds")
+    us_clean <- us_data %>% dplyr::select(c(date,state,positive,negative,total,hospitalized,death)) %>%
+        mutate(date = as.Date(as.character(date),format="%Y%m%d")) %>% 
+        group_by(state) %>% arrange(date) %>%
+        mutate(Daily_Test_Positive = c(0,diff(positive))) %>% 
+        mutate(Daily_Test_Negative = c(0,diff(negative))) %>% 
+        mutate(Daily_Test_All = c(0,diff(total))) %>% 
+        mutate(Daily_Hospitalized = c(0,diff(hospitalized))) %>% 
+        mutate(Daily_Deaths = c(0,diff(death))) %>%
+        merge(us_popsize) %>%
+        rename(Date = date, Location = state_full, Population_Size = total_pop, Total_Deaths = death, 
+              Total_Cases = positive, Total_Hospitalized = hospitalized, 
+              Total_Test_Negative = negative, Total_Test_Positive = positive, Total_Test_All = total) %>%
+        mutate(Daily_Cases = Daily_Test_Positive, Total_Cases = Total_Test_Positive) %>%
+        select(-c(state,Total_Test_Negative,Daily_Test_Negative))
 
+    saveRDS(us_clean,filename_us_data) #save clean file for loading unless it's outdated
+}
 
+#################################
+#US data from NY Times
+filename_us_nyt = paste0("us-nyt-cleandata-",Sys.Date(),'.rds')
 
-get_data <- function()
-{
-  filename = paste0("clean_data_",Sys.Date(),'.rds') #if the data file for today is here, load then return from function
-  if (file.exists(filename)) {
-     all_data <- readRDS(filename)    
-     return(all_data)  
-  }
-  #if data file is not here, go through all of the below
-  
-  #data for population size for each state/country so we can compute cases per 100K
-  us_popsize <- readRDS("us_popsize.rds") %>% rename(state_abr = state, state = state_full)
-  world_popsize <-readRDS("world_popsize.rds") 
-  
-  all_data = list() #will save and return all datasets as list
-  
+if (file.exists(filename_us_nyt)) {
+  #################################
+  # load already clean data locally
+  #################################
+  us_nyt_clean <- readRDS(filename_us_nyt)
+} else {
   #################################
   # pull data from Covidtracking and process
   #################################
-  us_ct_data <- read_csv("https://covidtracking.com/api/states/daily.csv")
-  us_ct_clean <- us_ct_data %>% dplyr::select(c(date,state,positive,negative,total,hospitalized,death)) %>%
-    mutate(date = as.Date(as.character(date),format="%Y%m%d")) %>% 
-    group_by(state) %>% arrange(date) %>%
-    mutate(Daily_Test_Positive = c(0,diff(positive))) %>% 
-    mutate(Daily_Test_Negative = c(0,diff(negative))) %>% 
-    mutate(Daily_Test_All = c(0,diff(total))) %>% 
-    mutate(Daily_Hospitalized = c(0,diff(hospitalized))) %>% 
-    mutate(Daily_Deaths = c(0,diff(death))) %>% rename(state_abr = state) %>%
-    merge(us_popsize) %>%
-    rename(Date = date, Location = state, Population_Size = total_pop, Total_Deaths = death, 
-           Total_Cases = positive, Total_Hospitalized = hospitalized, 
-           Total_Test_Negative = negative, Total_Test_Positive = positive, Total_Test_All = total) %>%
-    mutate(Daily_Cases = Daily_Test_Positive, Total_Cases = Total_Test_Positive) %>%
-    select(-c(state_abr,Total_Test_Negative,Daily_Test_Negative))
-  
-  #################################
-  # pull data from NYT and process
-  #################################
   us_nyt_data <- read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv")
+  #data for population size for each state/country so we can compute cases per 100K
+  us_popsize <- readRDS("us_popsize.rds") %>% select(-state) %>% rename(state = state_full)
   us_nyt_clean <- us_nyt_data %>% dplyr::select(c(date,state,cases,deaths)) %>%
+    #mutate(date = as.Date(as.character(date),format="%Y%m%d")) %>% 
     group_by(state) %>% arrange(date) %>%
     mutate(Daily_Cases = c(0,diff(cases))) %>% 
     mutate(Daily_Deaths = c(0,diff(deaths))) %>%
     merge(us_popsize) %>%
     rename(Date = date, Location = state, Population_Size = total_pop, Total_Deaths = deaths, 
-           Total_Cases = cases)  %>%
-    select(-state_abr)
+           Total_Cases = cases)
   
-  
-  #################################
-  # pull US data from JHU github and process
-  #################################
-  us_jhu_cases <- readr::read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv")
-  us_jhu_deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv")
-  # Clean cases
-  us_jhu_cases <- us_jhu_cases %>% filter(iso3 == "USA") %>%
-    dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -FIPS, -Admin2, -Combined_Key)) %>%
-    rename(Location = Province_State)
-  us_jhu_cases <- aggregate(. ~ Location, us_jhu_cases, FUN = sum)
-  us_jhu_cases_clean <- gather(us_jhu_cases, Date, Cases, -Location)
-  # Clean deaths
-  us_jhu_deaths <- us_jhu_deaths %>% filter(iso3 == "USA") %>%
-    dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -FIPS, -Admin2, -Combined_Key, -Population)) %>%
-    rename(Location = Province_State)
-  us_jhu_deaths <- aggregate(. ~ Location, us_jhu_deaths, FUN = sum)
-  us_jhu_deaths_clean <- gather(us_jhu_deaths, Date, Deaths, -Location)
-  us_jhu_combined <- merge(us_jhu_cases_clean, us_jhu_deaths_clean)
-  us_jhu_popsize <- us_popsize %>% rename(Location = state)
-  # This merge removes cruise ship cases/death counts
-  us_jhu_merge <- merge(us_jhu_combined, us_jhu_popsize)
-  us_jhu_clean <- us_jhu_merge %>% mutate(Date = as.Date(as.character(Date),format="%m/%d/%y")) %>%
-    group_by(Location) %>% arrange(Date) %>%
-    mutate(Daily_Cases = c(0,diff(Cases))) %>%
-    mutate(Daily_Deaths = c(0,diff(Deaths))) %>% 
-    ungroup() %>%
-    rename(Total_Deaths = Deaths, Total_Cases = Cases, Population_Size = total_pop) %>% 
-    select(-state_abr) %>%
-    data.frame()
-  
-  
-  #################################
-  # pull world data from JHU github and process
-  #################################
-  world_cases <- readr::read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv")
-  world_deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv")
-  # clean the data for plotting
-  world_cases <- world_cases %>% dplyr::select(c(-`Province/State`, -Lat, -Long)) %>%
-    rename(country= `Country/Region`)
-  world_cases <- aggregate(. ~ country, world_cases, FUN = sum)
-  world_deaths <- world_deaths %>% dplyr::select(c(-`Province/State`, -Lat, -Long)) %>%
-    rename(country= `Country/Region`)
-  world_deaths <- aggregate(. ~ country, world_deaths, FUN = sum)
-  #Melt case and death data
-  world_cases <- merge(world_popsize, world_cases)
-  melt_cases <- gather(world_cases, date, cases, -country, -country_pop)
-  world_deaths <- merge(world_deaths, world_popsize)
-  melt_deaths <- gather(world_deaths, date, deaths, -country, -country_pop)
-  all_merge <- merge(melt_deaths, melt_cases)
-  world_jhu_clean <- all_merge %>% mutate(date = as.Date(as.character(date),format="%m/%d/%y")) %>%
-    group_by(country) %>% arrange(date) %>%
-    mutate(Daily_Cases = c(0,diff(cases))) %>%
-    mutate(Daily_Deaths = c(0,diff(deaths))) %>% 
-    ungroup() %>%
-    rename(Date = date, Total_Deaths = deaths, Total_Cases = cases, Location = country, Population_Size = country_pop) %>% 
-    data.frame()
-  
-  #################################
-  # combine all data into list
-  all_data$us_jhu_clean = us_jhu_clean
-  all_data$us_nyt_clean = us_nyt_clean
-  all_data$us_ct_clean = us_ct_clean
-  all_data$world_jhu_clean = world_jhu_clean
+  saveRDS(us_nyt_clean,filename_us_nyt)
+}
 
-  #save the data
-  saveRDS(all_data, filename)    
-  
-   
-  return(all_data)
-  
-}  
-    
-
-###########################################
-# function that re-reads the data every so often
-###########################################
-all_data <- reactivePoll(intervalMillis = 1000*60*60*12, # pull new data every 12 hours
-                         session = NULL,
-                         checkFunc = function() {Sys.time()}, #this will always return a different value, which means at intervals specified by intervalMillis the new data will be pulled
-                         valueFunc = function() {get_data()} )
-
-#read data is reactive, doesn't work for rest below 
-all_dat = isolate(all_data())
 
 #################################
-# pull data back out of lists 
+#US data from JHU
+filename_us_jhu = paste0("us-jhu-cleandata-",Sys.Date(),'.rds')
 
-us_jhu_clean = all_dat$us_jhu_clean
-us_nyt_clean = all_dat$us_nyt_clean  
-us_ct_clean = all_dat$us_ct_clean  
-world_jhu_clean = all_dat$world_jhu_clean 
+#################################
+# load already clean data locally
+#################################
+ if (file.exists(filename_us_jhu)) {
+   us_jhu_clean <- readRDS(filename_us_jhu)
+ } else {
+  #################################
+  # pull data from JHU github and process
+  #################################
+   us_jhu_cases <- readr::read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv")
+   us_jhu_deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv")
+   #data for population size for each state/country so we can compute cases per 100K
+   us_popsize <- readRDS("us_popsize.rds") %>% select(-state) %>% rename(state = state_full)
+   # Clean cases
+   us_jhu_cases <- us_jhu_cases %>% filter(iso3 == "USA") %>%
+     dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -FIPS, -Admin2, -Combined_Key)) %>%
+   rename(Location = Province_State)
+   us_jhu_cases <- aggregate(. ~ Location, us_jhu_cases, FUN = sum)
+   us_jhu_cases_clean <- gather(us_jhu_cases, Date, Cases, -Location)
+  # Clean deaths
+   us_jhu_deaths <- us_jhu_deaths %>% filter(iso3 == "USA") %>%
+     dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -FIPS, -Admin2, -Combined_Key, -Population)) %>%
+     rename(Location = Province_State)
+   us_jhu_deaths <- aggregate(. ~ Location, us_jhu_deaths, FUN = sum)
+   us_jhu_deaths_clean <- gather(us_jhu_deaths, Date, Deaths, -Location)
+   us_jhu_combined <- merge(us_jhu_cases_clean, us_jhu_deaths_clean)
+   us_jhu_popsize <- us_popsize %>% rename(Location = state)
+# This merge removes cruise ship cases/death counts
+   us_jhu_merge <- merge(us_jhu_combined, us_jhu_popsize)
+   us_jhu_clean <- us_jhu_merge %>% mutate(Date = as.Date(as.character(Date),format="%m/%d/%y")) %>%
+     group_by(Location) %>% arrange(Date) %>%
+     mutate(Daily_Cases = c(0,diff(Cases))) %>%
+     mutate(Daily_Deaths = c(0,diff(Deaths))) %>% 
+     ungroup() %>%
+     rename(Total_Deaths = Deaths, Total_Cases = Cases, Population_Size = total_pop) %>% 
+     data.frame()
+   
+saveRDS(us_jhu_clean,filename_us_jhu)
 
-state_var = unique(us_ct_clean$Location)
-country_var = unique(world_jhu_clean$Location)
+}
 
+
+
+#################################
+#Pull and clean world data
+filename_world = paste0("world-cleandata-",Sys.Date(),'.rds')
+if (file.exists(filename_world)) {
+  #################################
+  # load already clean data locally
+  #################################
+  world_clean <- readRDS(filename_world)
+} else {
+  #################################
+    # pull world data from JHU github and process
+    #################################
+    world_cases <- readr::read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv")
+    world_deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv")
+    world_popsize <-readRDS("./world_popsize.rds") 
+    # clean the data for plotting
+    world_cases <- world_cases %>% dplyr::select(c(-`Province/State`, -Lat, -Long)) %>%
+        rename(country= `Country/Region`)
+    world_cases <- aggregate(. ~ country, world_cases, FUN = sum)
+    world_deaths <- world_deaths %>% dplyr::select(c(-`Province/State`, -Lat, -Long)) %>%
+        rename(country= `Country/Region`)
+    world_deaths <- aggregate(. ~ country, world_deaths, FUN = sum)
+    #Melt case and death data
+    world_cases <- merge(world_popsize, world_cases)
+    melt_cases <- gather(world_cases, date, cases, -country, -country_pop)
+    world_deaths <- merge(world_deaths, world_popsize)
+    melt_deaths <- gather(world_deaths, date, deaths, -country, -country_pop)
+    all_merge <- merge(melt_deaths, melt_cases)
+    world_clean <- all_merge %>% mutate(date = as.Date(as.character(date),format="%m/%d/%y")) %>%
+        group_by(country) %>% arrange(date) %>%
+        mutate(Daily_Cases = c(0,diff(cases))) %>%
+        mutate(Daily_Deaths = c(0,diff(deaths))) %>% 
+        ungroup() %>%
+        rename(Date = date, Total_Deaths = deaths, Total_Cases = cases, Location = country, Population_Size = country_pop) %>% 
+        data.frame()
+
+saveRDS(world_clean,filename_world)
+}
+
+state_var = unique(us_clean$Location)
+country_var = unique(world_clean$Location)
 
 
 #################################
@@ -318,8 +321,6 @@ ui <- fluidPage(
 ###########################################
 server <- function(input, output, session) {
 
- 
-  
   ###########################################
   # function that takes UI settings and produces data for each plot
   ###########################################
@@ -439,7 +440,7 @@ server <- function(input, output, session) {
           
           # create data
           plot_dat <- reactive({
-            set_outcome(world_jhu_clean,input$case_death_w,input$daily_tot_w,input$absolute_scaled_w,input$xscale_w,input$count_limit_w,input$alltabs,input$country_selector)
+            set_outcome(world_clean,input$case_death_w,input$daily_tot_w,input$absolute_scaled_w,input$xscale_w,input$count_limit_w,input$alltabs,input$country_selector)
           })
           
         #make the plot for cases/deaths for world data
@@ -456,13 +457,13 @@ server <- function(input, output, session) {
   {
     #create data
     plot_dat <- reactive({
-      us_dat <- us_ct_clean      
+      us_dat <- us_clean      
       if (input$otherdata == "Yes") #add NYT data if selected
       {
-        us_ct_clean$source = "covidtracker"
+        us_clean$source = "covidtracker"
         us_nyt_clean$source = "nytimes"
         us_jhu_clean$source = "jhu"
-        us_dat <- dplyr::bind_rows(us_ct_clean, us_nyt_clean, us_jhu_clean)
+        us_dat <- dplyr::bind_rows(us_clean, us_nyt_clean, us_jhu_clean)
       }
       set_outcome(us_dat,input$case_death,input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs,input$state_selector)
     })
