@@ -178,8 +178,9 @@ ui <- fluidPage(
   tags$head(includeHTML(("google-analytics.html"))), #this is for Google analytics tracking.
   includeCSS("appstyle.css"),
   #main tabs
-  navbarPage( title = "YACT - Yet Another COVID-19 Tracker", id = 'alltabs', selected = "us", header = "",
-              
+  navbarPage( title = "COVID-19 Tracker", id = 'alltabs', selected = "us", header = "",
+  #navbarPage( title = "YACT - Yet Another COVID-19 Tracker", id = 'alltabs', selected = "us", header = "",
+                          
               tabPanel(title = "US", value = "us",
                        sidebarLayout(
                          sidebarPanel(
@@ -247,8 +248,6 @@ ui <- fluidPage(
               tabPanel( title = "About", value = "about",
                         tagList(    
                           fluidRow( #all of this is the header
-                            #tags$div(id = "shinyheadertitle", "YACT - Yet Another COVID-19 Tracker"),
-                            #the style 'shinyheadertitle' is defined in the appstyle.css file
                             tags$div(
                               id = "bigtext",
                               "This COVID-19 tracker is brought to you by the",
