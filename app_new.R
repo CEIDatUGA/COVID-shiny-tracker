@@ -316,7 +316,8 @@ ui <- fluidPage(
                               a( "in this GitHub repository.", href = "https://github.com/CEIDatUGA/COVID-shiny-tracker", target = "_blank" ),
                               'We welcome feedback and feature requests, please send them as a',
                               a( "GitHub Issue", href = "https://github.com/CEIDatUGA/COVID-shiny-tracker/issues", target = "_blank" ),
-                              'or contact Andreas Handel.'
+                              'or contact',
+                              a("Andreas Handel.", href = "https://www.andreashandel.com/", target = "_blank")
                             ),# and tag
                             tags$div(
                               id = "bigtext",
@@ -335,6 +336,11 @@ ui <- fluidPage(
                               'has several additional projects related to COVID-19, which can be found on the',
                               a( "CEID COVID-19 Portal.", href = "http://2019-coronavirus-tracker.com/", target = "_blank" )
                             ), #Close the bigtext text div
+                            tags$div(
+                              id = "bigtext",
+                              "If you are interested in learning more about infectious disease epidemiology and modeling, check out", 
+                              a("our (slightly advanced) interactive modeling software and tutorial.", href = "https://shiny.ovpr.uga.edu/DSAIDE/", target = "_blank" )
+                            ) #Close the bigtext text div
                           ), #close fluidrow
                           fluidRow( #all of this is the footer
                             column(3,
