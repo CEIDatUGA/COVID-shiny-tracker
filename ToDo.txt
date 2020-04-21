@@ -2,3 +2,5 @@ Things that could be done to improve app:
 
 * further streamline code
 * add trend-lines and 1/2-week predictions based on simple smoothing/extrapolation
+* Add ourworld in data source: https://github.com/owid/covid-19-data/tree/master/public/data
+* Update x-axis button/slider so we can either specify at which calendar day or which N to start
