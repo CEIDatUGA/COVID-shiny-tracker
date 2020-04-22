@@ -63,53 +63,6 @@ get_data <- function()
   #################################
   # pull data from NYT and process
   #################################
-  us_nyt_data <- readr::read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv")
-  us_nyt_clean <- us_nyt_data %>% dplyr::select(c(date,state,cases,deaths)) %>%
-    group_by(state) %>% arrange(date) %>%
-    mutate(Daily_Cases = c(0,diff(cases))) %>% 
-    mutate(Daily_Deaths = c(0,diff(deaths))) %>%
-    merge(us_popsize) %>%
-    rename(Date = date, Location = state, Population_Size = total_pop, Total_Deaths = deaths, 
-           Total_Cases = cases)  %>%
-    select(-state_abr)
-  
-  #################################
-  # pull data from USAFacts and process
-  #################################
-  usafct_case_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_confirmed_usafacts.csv")
-  usafct_case_clean <- usafct_case_data %>% dplyr::filter(countyFIPS == 0) %>% #only retain state-wide data
-    dplyr::select(-countyFIPS, -`County Name`, -stateFIPS) %>%
-    tidyr::pivot_longer(-State, names_to = "Date", values_to = "Daily_Cases") %>%
-    mutate(Date = as.Date(Date,format="%m/%d/%y")) %>% 
-    group_by(State) %>% arrange(Date) %>%
-    mutate(Total_Cases = cumsum(Daily_Cases)) %>% 
-    rename(state_abr = State) %>%
-    merge(us_popsize) %>%
-    rename(Location = state, Population_Size = total_pop) %>%
-    select(-c(state_abr))
-  
-  usafct_death_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_deaths_usafacts.csv")
-  usafct_death_clean <- usafct_death_data %>% dplyr::filter(countyFIPS == 0) %>% #only retain state-wide data
-    dplyr::select(-countyFIPS, -`County Name`, -stateFIPS) %>%
-    tidyr::pivot_longer(-State, names_to = "Date", values_to = "Daily_Deaths") %>%
-    mutate(Date = as.Date(Date,format="%m/%d/%y")) %>% 
-    group_by(State) %>% arrange(Date) %>%
-    mutate(Total_Deaths = c(0,diff(Daily_Deaths))) %>% 
-    rename(state_abr = State) %>%
-    merge(us_popsize) %>%
-    rename(Location = state, Population_Size = total_pop) %>%
-    select(-state_abr, -Population_Size)
-  
-  usafct_clean <- left_join(usafct_case_clean, usafct_death_clean) %>%
-                  group_by(Location) %>% arrange(Date)  %>%
-                  ungroup() %>%
-                  data.frame()
-    
-  
-  
-  #################################
-  # pull data from NYT and process
-  #################################
   us_nyt_data <- read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv")
   us_nyt_clean <- us_nyt_data %>% dplyr::select(c(date,state,cases,deaths)) %>%
     group_by(state) %>% arrange(date) %>%
@@ -184,14 +137,15 @@ get_data <- function()
   all_data$us_nyt_clean = us_nyt_clean
   all_data$us_ct_clean = us_ct_clean
   all_data$world_jhu_clean = world_jhu_clean
-  all_data$usafct_clean =  usafct_clean
-  
+
   #save the data
   saveRDS(all_data, filename)    
   
-   return(all_data)
+   
+  return(all_data)
   
 }  
+    
 
 ###########################################
 # function that re-reads the data every so often
@@ -207,19 +161,14 @@ all_dat = isolate(all_data())
 #################################
 # pull data back out of lists 
 
-usafct_clean = all_dat$usafct_clean 
 us_jhu_clean = all_dat$us_jhu_clean
 us_nyt_clean = all_dat$us_nyt_clean  
 us_ct_clean = all_dat$us_ct_clean  
 world_jhu_clean = all_dat$world_jhu_clean 
 
-us_ct_clean$source = "COVIDTracking"
-us_nyt_clean$source = "NYTimes"
-us_jhu_clean$source = "JHU"
-usafct_clean$source = "USAFacts"
-
 state_var = unique(us_ct_clean$Location)
 country_var = unique(world_jhu_clean$Location)
+
 
 
 #################################
@@ -236,8 +185,8 @@ ui <- fluidPage(
                        sidebarLayout(
                          sidebarPanel(
                            shinyWidgets::pickerInput("state_selector", "Select State(s)", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("Georgia","California","Washington") ),
-                           shiny::selectInput( "otherdata", "Show additional data sources",c("Yes" = "Yes", "No" = "No"), selected = "No"),
-                           shiny::div("Also show data from additional sources (see 'about' tab for more)."),
+                           shiny::selectInput( "otherdata", "Show NYT and JHU data",c("Yes" = "Yes", "No" = "No"), selected = "No"),
+                           shiny::div("Also show data from NY Times and JHU (cases and deaths only)."),
                            br(),
                            shiny::selectInput( "case_death",   "Outcome",c("Cases" = "Cases", "Hospitalizations" = "Hospitalized", "Deaths" = "Deaths")),
                            shiny::div("Modify the top plot to display cases, hospitalizations, or deaths."),
@@ -316,8 +265,7 @@ ui <- fluidPage(
                               a( "in this GitHub repository.", href = "https://github.com/CEIDatUGA/COVID-shiny-tracker", target = "_blank" ),
                               'We welcome feedback and feature requests, please send them as a',
                               a( "GitHub Issue", href = "https://github.com/CEIDatUGA/COVID-shiny-tracker/issues", target = "_blank" ),
-                              'or contact',
-                              a("Andreas Handel.", href = "https://www.andreashandel.com/", target = "_blank")
+                              'or contact Andreas Handel.'
                             ),# and tag
                             tags$div(
                               id = "bigtext",
@@ -325,10 +273,9 @@ ui <- fluidPage(
                               a("The Covid Tracking Project.",  href = "https://covidtracking.com/", target = "_blank" ),
                               "This data source reports all and positive tests, hospitalizations and deaths for each state. We interpret positive tests as corresponding to new cases. Additional US data (cases and deaths only) is sourced from the",
                               a("New York Times (NYT)", href = "https://github.com/nytimes/covid-19-data", target = "_blank" ),
-                              a("USA Facts", href = "https://usafacts.org/visualizations/coronavirus-covid-19-spread-map/", target = "_blank" ),
                               "and from the",
                               a("Johns Hopkins University Center for Systems Science and Engineering (JHU).", href = "https://github.com/CSSEGISandData/COVID-19", target = "_blank" ),
-                              "World data is also sourced from the same JHU source. For more details on each data source, see the data websites. Note that some data sources might only report some data, and numbers might not be reliable, which can lead to nonsensical graphs (e.g. negative new daily cases/deaths or the fraction of positive tests being greater than 1). We make no attempt at cleaning/fixing the data, we only display it."
+                              "World data is also sourced from the same JHU source. For more details on each data source, see the data websites. Note that some data might not be fully reliable, which can lead to nonsensical graphs (e.g. the fraction of positive tests negative or greater than 1). We make no attempt at cleaning/fixing the data, we only display it."
                             ),              
                             tags$div(
                               id = "bigtext",
@@ -336,11 +283,6 @@ ui <- fluidPage(
                               'has several additional projects related to COVID-19, which can be found on the',
                               a( "CEID COVID-19 Portal.", href = "http://2019-coronavirus-tracker.com/", target = "_blank" )
                             ), #Close the bigtext text div
-                            tags$div(
-                              id = "bigtext",
-                              "If you are interested in learning more about infectious disease epidemiology and modeling, check out", 
-                              a("our (slightly advanced) interactive modeling software and tutorial.", href = "https://shiny.ovpr.uga.edu/DSAIDE/", target = "_blank" )
-                            ) #Close the bigtext text div
                           ), #close fluidrow
                           fluidRow( #all of this is the footer
                             column(3,
@@ -382,7 +324,6 @@ server <- function(input, output, session) {
   ###########################################
   set_outcome <- function(plot_dat,case_death,daily_tot,absolute_scaled,xscale,count_limit,selected_tab,location_selector)
   {
-    
     out_type = paste(daily_tot,case_death,sep='_') #make string from UI inputs that correspond with variable names
     plot_dat <- plot_dat %>%   filter(Location %in% location_selector) %>%      #Only process data for locations that are  selected
                                mutate(outcome = get(out_type)) #pick output based on variable name created from UI
@@ -463,7 +404,7 @@ server <- function(input, output, session) {
                                  line = list( width = linesize), text = tooltip_text, colors = brewer.pal(ncols, "Dark2")) %>%
                                  layout(yaxis = list(title=plot_list[[2]][ylabel], type = yscale, size = 18)) 
      } else { #the other plots should not change
-        p_dat <- plot_dat %>% filter(source == "COVIDTracking")
+        p_dat <- plot_dat %>% filter(source == "covidtracker")
         #browser()
         tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0(tool_tip[1], ": ", p_dat$Date), paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
         ncols = max(3,length(unique(p_dat$Location)))
@@ -517,7 +458,10 @@ server <- function(input, output, session) {
       us_dat <- us_ct_clean      
       if (input$otherdata == "Yes") #add NYT data if selected
       {
-        us_dat <- dplyr::bind_rows(us_ct_clean, us_nyt_clean, us_jhu_clean, usafct_clean)
+        us_ct_clean$source = "covidtracker"
+        us_nyt_clean$source = "nytimes"
+        us_jhu_clean$source = "jhu"
+        us_dat <- dplyr::bind_rows(us_ct_clean, us_nyt_clean, us_jhu_clean)
       }
       set_outcome(us_dat,input$case_death,input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs,input$state_selector)
     })
