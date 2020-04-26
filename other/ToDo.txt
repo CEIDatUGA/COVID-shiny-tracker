@@ -3,7 +3,6 @@ Things that could be done to improve app:
 * Add ourworld in data source for world tab: https://github.com/owid/covid-19-data/tree/master/public/data
 * Update x-axis button/slider so we can either specify at which calendar day or which N to start
 * add data source to tooltip
-* add an "all US" option as a choice among states on the US tab (for all outcomes and data sources). Probably best computed for each US dataset during data cleaning/processing.
 * add trend-lines and 1 and/or 2-week predictions based on simple smoothing/extrapolation
 * change the 'data source' option to be like the state selector, which allows users to choose any source they want.
 * further streamline code

@@ -61,12 +61,6 @@ get_data <- function()
     mutate(Daily_Cases = Daily_Test_Positive, Total_Cases = Total_Test_Positive) %>%
     select(-c(state_abr,Total_Test_Negative,Daily_Test_Negative))
   
-  #add all US by summing over all variables
-  all_us <- us_ct_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
-  all_us$Location = "US"
-  all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
-  us_ct_clean = rbind(us_ct_clean,all_us)
-  
   #################################
   # pull data from NYT and process
   #################################
@@ -79,43 +73,29 @@ get_data <- function()
     rename(Date = date, Location = state, Population_Size = total_pop, Total_Deaths = deaths, 
            Total_Cases = cases)  %>%
     select(-state_abr)
-
-  #add all US by summing over all variables
-  all_us <- us_nyt_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
-  all_us$Location = "US"
-  all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
-  us_nyt_clean = rbind(us_nyt_clean,all_us)
-
+  
   #################################
   # pull data from USAFacts and process
   #################################
   usafct_case_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_confirmed_usafacts.csv")
-  state_df = usafct_case_data %>% distinct(stateFIPS, .keep_all = TRUE) %>% select(3:4)
-  usafct_case_clean <- usafct_case_data %>% 
-                       dplyr::group_by(stateFIPS) %>% 
-                       summarize_if(is.numeric, sum, na.rm=TRUE) %>%
-                       dplyr::select(-countyFIPS) %>% 
-                       left_join(state_df) %>%    
-    tidyr::pivot_longer(-State, names_to = "Date", values_to = "Total_Cases") %>%
+  usafct_case_clean <- usafct_case_data %>% dplyr::filter(countyFIPS == 0) %>% #only retain state-wide data
+    dplyr::select(-countyFIPS, -`County Name`, -stateFIPS) %>%
+    tidyr::pivot_longer(-State, names_to = "Date", values_to = "Daily_Cases") %>%
     mutate(Date = as.Date(Date,format="%m/%d/%y")) %>% 
     group_by(State) %>% arrange(Date) %>%
-    mutate(Daily_Cases = c(0,diff(Total_Cases))) %>% 
+    mutate(Total_Cases = cumsum(Daily_Cases)) %>% 
     rename(state_abr = State) %>%
     merge(us_popsize) %>%
     rename(Location = state, Population_Size = total_pop) %>%
     select(-c(state_abr))
   
   usafct_death_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_deaths_usafacts.csv")
-  state_df = usafct_death_data %>% distinct(stateFIPS, .keep_all = TRUE) %>% select(3:4)
-  usafct_death_clean <- usafct_death_data %>% 
-    dplyr::group_by(stateFIPS) %>% 
-    summarize_if(is.numeric, sum, na.rm=TRUE) %>%
-    dplyr::select(-countyFIPS) %>% 
-    left_join(state_df) %>%    
-    tidyr::pivot_longer(-State, names_to = "Date", values_to = "Total_Deaths") %>%
+  usafct_death_clean <- usafct_death_data %>% dplyr::filter(countyFIPS == 0) %>% #only retain state-wide data
+    dplyr::select(-countyFIPS, -`County Name`, -stateFIPS) %>%
+    tidyr::pivot_longer(-State, names_to = "Date", values_to = "Daily_Deaths") %>%
     mutate(Date = as.Date(Date,format="%m/%d/%y")) %>% 
     group_by(State) %>% arrange(Date) %>%
-    mutate(Daily_Deaths = c(0,diff(Total_Deaths))) %>% 
+    mutate(Total_Deaths = c(0,diff(Daily_Deaths))) %>% 
     rename(state_abr = State) %>%
     merge(us_popsize) %>%
     rename(Location = state, Population_Size = total_pop) %>%
@@ -126,13 +106,20 @@ get_data <- function()
                   ungroup() %>%
                   data.frame()
     
-  #add all US by summing over all variables
-  all_us <- usafct_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
-  all_us$Location = "US"
-  all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
-  usafct_clean = rbind(usafct_clean,all_us)
   
   
+  #################################
+  # pull data from NYT and process
+  #################################
+  us_nyt_data <- read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv")
+  us_nyt_clean <- us_nyt_data %>% dplyr::select(c(date,state,cases,deaths)) %>%
+    group_by(state) %>% arrange(date) %>%
+    mutate(Daily_Cases = c(0,diff(cases))) %>% 
+    mutate(Daily_Deaths = c(0,diff(deaths))) %>%
+    merge(us_popsize) %>%
+    rename(Date = date, Location = state, Population_Size = total_pop, Total_Deaths = deaths, 
+           Total_Cases = cases)  %>%
+    select(-state_abr)
   
   
   #################################
@@ -165,13 +152,7 @@ get_data <- function()
     select(-state_abr) %>%
     data.frame()
   
-  #add all US by summing over all variables
-  all_us <- us_jhu_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
-  all_us$Location = "US"
-  all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
-  us_jhu_clean = rbind(us_jhu_clean,all_us)
   
-    
   #################################
   # pull world data from JHU github and process
   #################################
@@ -255,7 +236,7 @@ ui <- fluidPage(
                          sidebarPanel(
                            shinyWidgets::pickerInput("state_selector", "Select State(s)", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("Georgia","California","Washington") ),
                            shiny::selectInput( "otherdata", "Show additional data sources",c("Yes" = "Yes", "No" = "No"), selected = "No"),
-                           shiny::div("Show data from additional sources (see 'About' tab for details)."),
+                           shiny::div("Also show data from additional sources (see 'about' tab for more)."),
                            br(),
                            shiny::selectInput( "case_death",   "Outcome",c("Cases" = "Cases", "Hospitalizations" = "Hospitalized", "Deaths" = "Deaths")),
                            shiny::div("Modify the top plot to display cases, hospitalizations, or deaths."),
