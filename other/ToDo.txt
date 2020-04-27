@@ -4,6 +4,5 @@ Things that could be done to improve app:
 * Update x-axis button/slider so we can either specify at which calendar day or which N to start
 * add data source to tooltip
 * add trend-lines and 1 and/or 2-week predictions based on simple smoothing/extrapolation
-* change the 'data source' option to be like the state selector, which allows users to choose any source they want.
 * further streamline code
 
