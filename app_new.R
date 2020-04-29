@@ -476,10 +476,10 @@ server <- function(input, output, session) {
       plot_dat <- plot_dat %>% mutate(outcome = outcome / Population_Size * 100000) 
       y_labels[1] <- paste0(y_labels[1], " per 100K")
       y_labels[2] <- paste0(y_labels[2], " per 100K")
-      if (selected_tab == "us" )  
-      {
+      #if (selected_tab == "us" )  
+     # {
         plot_dat <- plot_dat %>%  mutate(test_outcome = test_outcome / Population_Size * 100000)
-      }
+     # }
     }
      
     #adjust data to align for plotting by cases on x-axis. 
