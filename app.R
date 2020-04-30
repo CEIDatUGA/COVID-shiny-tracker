@@ -9,11 +9,6 @@ library(ggplot2)
 library(plotly)
 library(RColorBrewer)
 library(tidyselect)
-#library(shinythemes)
-#library(htmlwidgets)
-#library(ggthemes)
-#library(tibbletime)
-#library(directlabels)
 
 
 #################################
@@ -41,7 +36,7 @@ get_data <- function()
   #################################
   # pull data from Covidtracking and process
   #################################
-  us_ct_data <- read_csv("https://covidtracking.com/api/states/daily.csv")
+  us_ct_data <- read_csv("https://covidtracking.com/api/v1/states/daily.csv")
   us_ct_clean <- us_ct_data %>% dplyr::select(c(date,state,positive,negative,total,hospitalized,death)) %>%
     mutate(date = as.Date(as.character(date),format="%Y%m%d")) %>% 
     group_by(state) %>% arrange(date) %>%
@@ -190,15 +185,53 @@ get_data <- function()
     mutate(Daily_Deaths = c(0,diff(deaths))) %>% 
     ungroup() %>%
     rename(Date = date, Total_Deaths = deaths, Total_Cases = cases, Location = country, Population_Size = country_pop) %>% 
+    mutate(Location = replace(Location, Location == 'Korea, South','South Korea')) %>%
+    mutate(Location = replace(Location, Location == 'Taiwan*','Taiwan')) %>% #fix a few locations
     data.frame()
   
+  
   #################################
-  # combine all data into list
-  all_data$us_jhu_clean = us_jhu_clean
-  all_data$us_nyt_clean = us_nyt_clean
-  all_data$us_ct_clean = us_ct_clean
-  all_data$world_jhu_clean = world_jhu_clean
-  all_data$usafct_clean =  usafct_clean
+  # pull world data from OWID github and process
+  #################################
+  owid_data <- readr::read_csv("https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/owid-covid-data.csv")
+  world_owid_clean <- owid_data %>% dplyr::select(-tests_units, -iso_code) %>%
+    rename(Total_Cases = total_cases, Total_Deaths = total_deaths, Daily_Cases = new_cases, Daily_Deaths = new_deaths, Location = location, Date = date, Daily_Test_All = new_tests, Total_Test_All = total_tests) %>% 
+    mutate(Population_Size = Total_Cases / total_cases_per_million * 1000000) %>% #back-calculate population size
+    mutate(Location = recode(Location, "United States" = "US")) %>%
+    mutate(Daily_Test_Positive = Daily_Cases ) %>% #assuming new cases means new positive tests
+    mutate(Total_Test_Positive = Total_Cases ) %>%
+    select( - contains('thousand'), - contains('million')) %>%
+    data.frame()
+ 
+  
+  #################################
+  # combine all data 
+  #################################
+
+  # give each US dataset a source label
+  us_source_var = c("COVIDTracking","NYTimes","JHU","USAFacts")
+  
+  us_ct_clean$source = us_source_var[1]
+  us_nyt_clean$source = us_source_var[2]
+  us_jhu_clean$source = us_source_var[3]
+  usafct_clean$source = us_source_var[4]
+  
+  #combine all US data from different sources
+  us_dat <- dplyr::bind_rows(us_ct_clean, us_nyt_clean, us_jhu_clean, usafct_clean) 
+  
+  
+  # give each world dataset a source label
+  world_source_var = c("JHU", "OWID")
+  
+  world_jhu_clean$source = world_source_var[1]
+  world_owid_clean$source = world_source_var[2]
+  
+  #combine all world data from different sources
+  world_dat <- dplyr::bind_rows(world_jhu_clean, world_owid_clean)
+  
+  #combine data in list  
+  all_data$us_dat = us_dat
+  all_data$world_dat = world_dat
   
   #save the data
   saveRDS(all_data, filename)    
@@ -217,35 +250,17 @@ all_data <- reactivePoll(intervalMillis = 1000*60*60*12, # pull new data every 1
 #read data is reactive, doesn't work for rest below 
 all_dat = isolate(all_data())
 
-#################################
-# pull data back out of lists 
-
-usafct_clean = all_dat$usafct_clean 
-us_jhu_clean = all_dat$us_jhu_clean
-us_nyt_clean = all_dat$us_nyt_clean  
-us_ct_clean = all_dat$us_ct_clean  
-world_jhu_clean = all_dat$world_jhu_clean 
+# pull data out of list 
+world_dat = all_dat$world_dat 
+us_dat = all_dat$us_dat 
 
 
-#further process and combine all US data
-state_var = unique(us_ct_clean$Location)
-us_source_var = c("COVIDTracking","NYTimes","JHU","USAFacts")
+#define variables for location and source selectors
+state_var = unique(us_dat$Location)
+country_var = sort(unique(world_dat$Location))
 
-us_ct_clean$source = us_source_var[1]
-us_nyt_clean$source = us_source_var[2]
-us_jhu_clean$source = us_source_var[3]
-usafct_clean$source = us_source_var[4]
-
-#combine all US data from different sources
-us_dat <- dplyr::bind_rows(us_ct_clean, us_nyt_clean, us_jhu_clean, usafct_clean) 
-
-#further process and combine all World data
-#currently only one world source, but setup allows for more
-country_var = unique(world_jhu_clean$Location)
-world_source_var = c("world_JHU")
-
-world_jhu_clean$source = world_source_var[1]
-world_dat <- dplyr::bind_rows(world_jhu_clean)
+us_source_var = unique(us_dat$source)
+world_source_var = unique(world_dat$source)
 
 
 #################################
@@ -260,7 +275,7 @@ ui <- fluidPage(
                        sidebarLayout(
                          sidebarPanel(
                            shinyWidgets::pickerInput("state_selector", "Select State(s)", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("Georgia","California","Washington") ),
-                           shiny::div("All of US is at end of state list."),
+                           shiny::div("US is at end of state list."),
                            br(),
                            shinyWidgets::pickerInput("us_source_selector", "Select Source(s)", us_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("COVIDTracking") ),
                           shiny::div("Choose data sources (see 'About' tab for details)."),
@@ -299,6 +314,9 @@ ui <- fluidPage(
                           sidebarPanel(
                             #Country selector coding with US, Italy, and Spain as always selected for a defult setting, will flash an error with none selected
                             shinyWidgets::pickerInput("country_selector", "Select countries", country_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("US", "Italy", "Spain")                        ),
+                            shinyWidgets::pickerInput("world_source_selector", "Select Source(s)", world_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") ),
+                            shiny::div("Choose data sources (see 'About' tab for details)."),
+                            br(),
                             shiny::selectInput( "case_death_w", "Outcome", c("Cases" = "Cases", "Deaths" = "Deaths")),
                             shiny::div("Modify the plot to display cases or deaths."),
                             br(),
@@ -318,10 +336,18 @@ ui <- fluidPage(
                           ), #end sidebar panel
                           
                           mainPanel(
-                            plotlyOutput(outputId = "case_death_plot_world", height = "500px"),
-                          ) #close mainpanel
+                            #change to plotOutput if using static ggplot object
+                            plotlyOutput(outputId = "world_case_death_plot", height = "300px"),
+                            #change to plotOutput if using static ggplot object
+                            plotlyOutput(outputId = "world_testing_plot", height = "300px"),
+                            #change to plotOutput if using static ggplot object
+                            plotlyOutput(outputId = "world_testing_frac_plot", height = "300px")
+                          ) #end main panel
+                          
                         ), #close sidebar layout
               ), #close world tab
+              
+              
               tabPanel( title = "About", value = "about",
                         tagList(    
                           fluidRow( #all of this is the header
@@ -354,7 +380,19 @@ ui <- fluidPage(
                               a("USA Facts", href = "https://usafacts.org/visualizations/coronavirus-covid-19-spread-map/", target = "_blank" ),
                               "and",
                               a("Johns Hopkins University Center for Systems Science and Engineering (JHU)", href = "https://github.com/CSSEGISandData/COVID-19", target = "_blank" ),
-                              "sources report cases and deaths. World data is sourced from the same JHU source. For more details on each data source, see the data websites. Note that some data sources might only report some data, and numbers might not be reliable, which can lead to nonsensical graphs (e.g. negative new daily cases/deaths or the fraction of positive tests being greater than 1). We make no attempt at cleaning/fixing the data, we only display it."
+                              "sources report cases and deaths."
+                              ), 
+                            tags$div(
+                              id = "bigtext",
+                              "World data comes from 2 different sources. On source is the", 
+                              a("Johns Hopkins University Center for Systems Science and Engineering (JHU)", href = "https://github.com/CSSEGISandData/COVID-19", target = "_blank" ),
+                              "the other source is",
+                              a("Our World in Data (OWID).", href = "https://github.com/owid/covid-19-data/tree/master/public/data", target = "_blank" ),
+                              "Both sources provide case and death data, OWID also provides testing data for some countries. For OWID, we assume reported cases correspond to positive tests."
+                            ),
+                            tags$div(
+                              id = "bigtext",
+                              "For more details on each data source, see their respective websites. Note that some data sources only report some data. Also, numbers might not be reliable, which can lead to nonsensical graphs (e.g. negative new daily cases/deaths or the fraction of positive tests being greater than 1). We make no attempt at cleaning/fixing the data, we only display it."
                             ),              
                             tags$div(
                               id = "bigtext",
@@ -406,17 +444,18 @@ server <- function(input, output, session) {
   ###########################################
   # function that takes UI settings and produces data for each plot
   ###########################################
-  set_outcome <- function(plot_dat,case_death,daily_tot,absolute_scaled,xscale,count_limit,selected_tab,location_selector,source_selector)
+  set_outcome <- function(all_plot_dat,case_death,daily_tot,absolute_scaled,xscale,count_limit,selected_tab,location_selector,source_selector)
   {
     
     out_type = paste(daily_tot,case_death,sep='_') #make string from UI inputs that correspond with variable names
-    plot_dat <- plot_dat %>%   filter(Location %in% location_selector) %>%      #Only process data for locations that are  selected
+    plot_dat <- all_plot_dat %>%   filter(Location %in% location_selector) %>%      #Only process data for locations that are  selected
                                filter(source %in% source_selector) %>%
                                 mutate(outcome = get(out_type)) #pick output based on variable name created from UI
     # do testing data for US
 
-    if ('COVIDTracking' %in% source_selector)  
+    if (('COVIDTracking' %in% source_selector) || ('OWID' %in% source_selector) )  
     {
+      
       test_out_type = paste(daily_tot,'Test_All',sep='_')
       test_pos_type = paste(daily_tot,'Test_Positive',sep='_')
       plot_dat <- plot_dat %>% mutate(test_outcome = get(test_out_type)) 
@@ -438,10 +477,10 @@ server <- function(input, output, session) {
       plot_dat <- plot_dat %>% mutate(outcome = outcome / Population_Size * 100000) 
       y_labels[1] <- paste0(y_labels[1], " per 100K")
       y_labels[2] <- paste0(y_labels[2], " per 100K")
-      if (selected_tab == "us" )  
-      {
+      #if (selected_tab == "us" )  
+     # {
         plot_dat <- plot_dat %>%  mutate(test_outcome = test_outcome / Population_Size * 100000)
-      }
+     # }
     }
      
     #adjust data to align for plotting by cases on x-axis. 
@@ -473,70 +512,59 @@ server <- function(input, output, session) {
   # function that takes data generated by above function and makes plots
   # uses plotly
   ###########################################
-  make_plotly <- function(plot_list, location_selector, yscale, xscale, ylabel, outname)
+  make_plotly <- function(plot_list, location_selector, yscale, xscale, ylabel, outname, selected_tab)
   {
     tool_tip <- plot_list[[3]]
     plot_dat <- data.frame(plot_list[[1]]) #need the extra data frame conversion from tibble to get tooltip_text line to work
     linesize = 2
     
     p_dat <- plot_dat 
-    if (outname == 'test_outcome' || outname == 'test_frac_outcome')
+    if (selected_tab == "us" && (outname == 'test_outcome' || outname == 'test_frac_outcome'))
     {
       p_dat <- plot_dat %>% filter(source == "COVIDTracking")
       
     }
+    if (selected_tab == "world" && (outname == 'test_outcome' || outname == 'test_frac_outcome'))
+    {
+      p_dat <- plot_dat %>% filter(source == "OWID")
+      
+    }
     
-    #add additional sources to case/death plot  
-#   if ( ( tool_tip[2] == "Cases" || tool_tip[2] == "Deaths") && outname == "outcome" && ylabel == 1)  
- #     {
-        ncols = max(3,length(unique(p_dat$Location)))
-        tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0(tool_tip[1], ": ", p_dat$Date), paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
-        pl <- plotly::plot_ly(p_dat) %>% plotly::add_trace(x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', color = ~Location, linetype = ~source,
+    ncols = max(3,length(unique(p_dat$Location)))
+    tooltip_text = paste(paste0("Location: ", p_dat$Location), 
+                         paste0(tool_tip[1], ": ", p_dat$Date), 
+                         paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
+    pl <- plotly::plot_ly(p_dat) %>% 
+          plotly::add_trace(x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', color = ~Location, linetype = ~source,
                                  line = list( width = linesize), text = tooltip_text, colors = brewer.pal(ncols, "Dark2")) %>%
                                  layout(yaxis = list(title=plot_list[[2]][ylabel], type = yscale, size = 18)) 
-     # } else { #the testing plots only have one set of data should not change
-     #    p_dat <- plot_dat 
-     #    #browser()
-     #    tooltip_text = paste(paste0("Location: ", p_dat$Location), paste0(tool_tip[1], ": ", p_dat$Date), paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
-     #    ncols = max(3,length(unique(p_dat$Location)))
-     #    pl <- p_dat %>%
-     #      plotly::plot_ly() %>%  
-     #      add_trace(x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', color = ~Location, linetype = ~Location, 
-     #                line = list( width = linesize), text = tooltip_text, colors = brewer.pal(ncols, "Dark2")) %>%
-     #      layout(  yaxis = list(title=plot_list[[2]][ylabel], type = yscale, size = 18)) 
-     #  }
-     #          
+    
    
     return(pl)
   }
   
 
-  ###########################################
-  #function that makes plot for world tab
-  ###########################################
-  plot_dat_world <- reactive({
-    set_outcome(world_dat,input$case_death_w,input$daily_tot_w,input$absolute_scaled_w,input$xscale_w,input$count_limit_w,input$alltabs,input$country_selector,"world_JHU")
-  })
-  
-  output$case_death_plot_world <- renderPlotly({
-    #create plot
-    pl <- make_plotly(plot_dat_world(), location_selector = input$country_selector, yscale = input$yscale_w, xscale = input$xscale_w, ylabel = 1, outname = 'outcome')
-  })
       
+
+  ###########################################
+  #function that preps data for US tab
+  ###########################################
   
+  plot_dat_us <- reactive({
+    set_outcome(us_dat,input$case_death,input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs,input$state_selector,input$us_source_selector)
+  })
+  
+    
   ###########################################
   #function that makes case/death plot for US tab
   ###########################################
-  plot_dat_cases <- reactive({
-    set_outcome(us_dat,input$case_death,input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs,input$state_selector,input$us_source_selector)
-  })
   
   output$case_death_plot <- renderPlotly({
     pl <- NULL
     if (!is.null(input$us_source_selector))
     {
     #create plot
-    pl <- make_plotly(plot_dat_cases(), location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 1, outname = 'outcome')
+    pl <- make_plotly(plot_dat_us(), location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 1, outname = 'outcome',selected_tab = input$alltabs)
     }
     return(pl)
   }) #end function making case/deaths plot
@@ -545,16 +573,13 @@ server <- function(input, output, session) {
   ###########################################
   #function that makes testing plot for US tab
   ###########################################
-  plot_dat_test <- reactive({
-    set_outcome(us_dat,input$case_death,input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs,input$state_selector,input$us_source_selector)
-  }) 
-  
+
   output$testing_plot <- renderPlotly({
     pl <- NULL
     if ('COVIDTracking' %in% input$us_source_selector)
     {
       #create plot
-    pl <- make_plotly(plot_dat_test(), location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 2, outname = 'test_outcome')
+    pl <- make_plotly(plot_dat_us(), location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 2, outname = 'test_outcome',selected_tab = input$alltabs)
     }
     return(pl)
   }) #end function making testing plot
@@ -563,21 +588,70 @@ server <- function(input, output, session) {
   ###########################################
   #function that makes testing positive fraction plot for US tab
   ###########################################
-  plot_dat_test_frac <- reactive({
-    set_outcome(us_dat,input$case_death,input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs,input$state_selector,input$us_source_selector)
-  })
-  
   output$testing_frac_plot <- renderPlotly({
       pl <- NULL
       if ('COVIDTracking' %in% input$us_source_selector)
       {
         #create plot
-        pl <- make_plotly(plot_dat_test_frac(), location_selector = input$state_selector, yscale = "identity", xscale = input$xscale, ylabel = 3, outname = 'test_frac_outcome')
+        pl <- make_plotly(plot_dat_us(), location_selector = input$state_selector, yscale = "identity", xscale = input$xscale, ylabel = 3, outname = 'test_frac_outcome',selected_tab = input$alltabs)
       }
       return(pl)
       }) #end function making testing plot
 
+  
+  ###########################################
+  #function that preps data for US tab
+  ###########################################
 
+  plot_dat_world <- reactive({
+    set_outcome(world_dat,input$case_death_w,input$daily_tot_w,input$absolute_scaled_w,input$xscale_w,input$count_limit_w,input$alltabs,input$country_selector,input$world_source_selector)
+  })
+
+  ###########################################
+  #function that makes case/death  for world tab
+  ###########################################
+  
+  output$world_case_death_plot <- renderPlotly({
+    pl <- NULL
+    if (!is.null(input$world_source_selector))
+    {
+      #create plot
+      pl <- make_plotly(plot_dat_world(), location_selector = input$country_selector, yscale = input$yscale_w, xscale = input$xscale_w, ylabel = 1, outname = 'outcome',selected_tab = input$alltabs)
+    }
+    return(pl)
+  }) #end function making case/deaths plot
+  
+  ###########################################
+  #function that makes testing plot for world tab
+  ###########################################
+  output$world_testing_plot <- renderPlotly({
+    pl <- NULL
+    if ('OWID' %in% input$world_source_selector)
+    {
+      #create plot
+      pl <- make_plotly(plot_dat_world(), location_selector = input$country_selector, yscale = input$yscale_w, xscale = input$xscale_w, ylabel = 2, outname = 'test_outcome',selected_tab = input$alltabs)
+    }
+    return(pl)
+  }) #end function making testing plot
+  
+  
+  ###########################################
+  #function that makes testing positive fraction plot for world tab
+  ###########################################
+  output$world_testing_frac_plot <- renderPlotly({
+    pl <- NULL
+    if ('OWID' %in% input$world_source_selector)
+    {
+      #create plot
+      pl <- make_plotly(plot_dat_world(), location_selector = input$country_selector, yscale = "identity", xscale = input$xscale_w, ylabel = 3, outname = 'test_frac_outcome',selected_tab = input$alltabs)
+    }
+    return(pl)
+  }) #end function making testing plot
+  
+  
+  
+  
+  
 } #end server function
 
 # Create Shiny object
