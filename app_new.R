@@ -552,8 +552,9 @@ server <- function(input, output, session) {
     # currently working for cases but creates error messages for rest
     if (outname == "outcome" && show_smoother == "Yes")
     {
-      p_dat2 <- p_dat %>%  select(Location,source,outcome,Time) %>%
+      p_dat2 <- p_dat  %>% select(Location,source,outcome,Time)%>% drop_na() %>%
                           group_by(Location, source) %>%
+                          filter(n() >= 2) %>%
                           mutate(smoother = loess(outcome ~ as.numeric(Time), span = .3)$fitted) %>%    
                           ungroup()
     
