@@ -390,7 +390,7 @@ ui <- fluidPage(
                               ), 
                             tags$div(
                               id = "bigtext",
-                              "World data comes from 2 different sources. On source is the", 
+                              "World data comes from 2 different sources. One source is the", 
                               a("Johns Hopkins University Center for Systems Science and Engineering (JHU)", href = "https://github.com/CSSEGISandData/COVID-19", target = "_blank" ),
                               "the other source is",
                               a("Our World in Data (OWID).", href = "https://github.com/owid/covid-19-data/tree/master/public/data", target = "_blank" ),
