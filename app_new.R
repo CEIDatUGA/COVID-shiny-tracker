@@ -522,7 +522,7 @@ server <- function(input, output, session) {
   {
     tool_tip <- plot_list[[3]]
     plot_dat <- data.frame(plot_list[[1]]) #need the extra data frame conversion from tibble to get tooltip_text line to work
-    linesize = 2
+    linesize = 1.5
     
     p_dat <- plot_dat 
     if (selected_tab == "us" && (outname == 'test_outcome' || outname == 'test_frac_outcome'))
@@ -544,8 +544,11 @@ server <- function(input, output, session) {
                          paste0(tool_tip[1], ": ", p_dat$Date), 
                          paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
     pl <- plotly::plot_ly(p_dat) %>% 
-          plotly::add_trace(x = ~Time, y = ~get(outname), type = 'scatter', mode = 'lines+markers', color = ~Location, linetype = ~source,
-                                 line = list( width = linesize), text = tooltip_text, colors = brewer.pal(ncols, "Dark2")) %>%
+          plotly::add_trace(x = ~Time, y = ~get(outname), type = 'scatter', 
+                                 mode = 'lines+markers', 
+                                 linetype = ~source, symbol = ~Location,
+                                 line = list(width = linesize), text = tooltip_text, 
+                                 color = ~Location, colors = brewer.pal(ncols, "Dark2")) %>%
                                  layout(yaxis = list(title=plot_list[[2]][ylabel], type = yscale, size = 18)) 
 
     # if requested by user, apply and show a smoothing function for case/hosp/death data
@@ -553,12 +556,16 @@ server <- function(input, output, session) {
     if (outname == "outcome" && show_smoother == "Yes")
     {
       p_dat2 <- p_dat  %>% select(Location,source,outcome,Time)%>% drop_na() %>%
-                          group_by(Location, source) %>%
+                          group_by(Location) %>%
                           filter(n() >= 2) %>%
-                          mutate(smoother = loess(outcome ~ as.numeric(Time), span = .3)$fitted) %>%    
+                          mutate(smoother = loess(outcome ~ as.numeric(Time), span = .4)$fitted) %>%    
                           ungroup()
     
-      pl <- pl %>% plotly::add_lines(x = ~Time, y = ~smoother, color = ~Location, data = p_dat2, showlegend = FALSE) 
+      pl <- pl %>% plotly::add_lines(x = ~Time, y = ~smoother, 
+                                     color = ~Location, data = p_dat2, 
+                                     line = list( width = 2*linesize),
+                                     opacity=0.3,
+                                     showlegend = FALSE) 
     }
     return(pl)
   }
