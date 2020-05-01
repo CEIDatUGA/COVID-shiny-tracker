@@ -459,7 +459,7 @@ server <- function(input, output, session) {
                                 mutate(outcome = get(out_type)) #pick output based on variable name created from UI
     # do testing data for US
 
-    if (('COVIDTracking' %in% source_selector) || ('OWID' %in% source_selector) )  
+    if ( ('COVIDTracking' %in% source_selector) || ('OWID' %in% source_selector) )  
     {
       
       test_out_type = paste(daily_tot,'Test_All',sep='_')
@@ -483,11 +483,12 @@ server <- function(input, output, session) {
       plot_dat <- plot_dat %>% mutate(outcome = outcome / Population_Size * 100000) 
       y_labels[1] <- paste0(y_labels[1], " per 100K")
       y_labels[2] <- paste0(y_labels[2], " per 100K")
-      #if (selected_tab == "us" )  
-     # {
-        plot_dat <- plot_dat %>%  mutate(test_outcome = test_outcome / Population_Size * 100000)
-     # }
-    }
+    
+      if ( ('COVIDTracking' %in% source_selector) || ('OWID' %in% source_selector) )  
+      {
+          plot_dat <- plot_dat %>%  mutate(test_outcome = test_outcome / Population_Size * 100000)
+      }
+    } #end scaling function
      
     #adjust data to align for plotting by cases on x-axis. 
     if (xscale == 'x_count')
@@ -570,22 +571,23 @@ server <- function(input, output, session) {
     return(pl)
   }
   
-
-      
-
   ###########################################
   #function that preps data for US tab
   ###########################################
-  
   plot_dat_us <- reactive({
     set_outcome(us_dat,input$case_death,input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs,input$state_selector,input$us_source_selector)
   })
   
-    
+  ###########################################
+  #function that preps data for world tab
+  ###########################################
+  plot_dat_world <- reactive({
+    set_outcome(world_dat,input$case_death_w,input$daily_tot_w,input$absolute_scaled_w,input$xscale_w,input$count_limit_w,input$alltabs,input$country_selector,input$world_source_selector)
+  })
+  
   ###########################################
   #function that makes case/death plot for US tab
   ###########################################
-  
   output$case_death_plot <- renderPlotly({
     pl <- NULL
     if (!is.null(input$us_source_selector))
@@ -595,12 +597,10 @@ server <- function(input, output, session) {
     }
     return(pl)
   }) #end function making case/deaths plot
-  
 
   ###########################################
   #function that makes testing plot for US tab
   ###########################################
-
   output$testing_plot <- renderPlotly({
     pl <- NULL
     if ('COVIDTracking' %in% input$us_source_selector)
@@ -611,7 +611,6 @@ server <- function(input, output, session) {
     return(pl)
   }) #end function making testing plot
   
-        
   ###########################################
   #function that makes testing positive fraction plot for US tab
   ###########################################
@@ -625,25 +624,15 @@ server <- function(input, output, session) {
       return(pl)
       }) #end function making testing plot
 
-  
-  ###########################################
-  #function that preps data for world tab
-  ###########################################
-
-  plot_dat_world <- reactive({
-    set_outcome(world_dat,input$case_death_w,input$daily_tot_w,input$absolute_scaled_w,input$xscale_w,input$count_limit_w,input$alltabs,input$country_selector,input$world_source_selector)
-  })
-
   ###########################################
   #function that makes case/death  for world tab
   ###########################################
-  
   output$world_case_death_plot <- renderPlotly({
     pl <- NULL
     if (!is.null(input$world_source_selector))
     {
       #create plot
-      pl <- make_plotly(plot_dat_world(), location_selector = input$country_selector, yscale = input$yscale_w, xscale = input$xscale_w, ylabel = 1, outname = 'outcome',selected_tab = input$alltabs, show_smoother = input$show_smoother_world)
+      pl <- make_plotly(plot_dat_world(), location_selector = input$country_selector, yscale = input$yscale_w, xscale = input$xscale_w, ylabel = 1, outname = 'outcome', selected_tab = input$alltabs, show_smoother = input$show_smoother_world)
     }
     return(pl)
   }) #end function making case/deaths plot
@@ -656,7 +645,7 @@ server <- function(input, output, session) {
     if ('OWID' %in% input$world_source_selector)
     {
       #create plot
-      pl <- make_plotly(plot_dat_world(), location_selector = input$country_selector, yscale = input$yscale_w, xscale = input$xscale_w, ylabel = 2, outname = 'test_outcome',selected_tab = input$alltabs, show_smoother = "no")
+      pl <- make_plotly(plot_dat_world(), location_selector = input$country_selector, yscale = input$yscale_w, xscale = input$xscale_w, ylabel = 2, outname = 'test_outcome', selected_tab = input$alltabs, show_smoother = "no")
     }
     return(pl)
   }) #end function making testing plot
@@ -670,14 +659,11 @@ server <- function(input, output, session) {
     if ('OWID' %in% input$world_source_selector)
     {
       #create plot
-      pl <- make_plotly(plot_dat_world(), location_selector = input$country_selector, yscale = "identity", xscale = input$xscale_w, ylabel = 3, outname = 'test_frac_outcome',selected_tab = input$alltabs, show_smoother = "no")
+      pl <- make_plotly(plot_dat_world(), location_selector = input$country_selector, yscale = "identity", xscale = input$xscale_w, ylabel = 3, outname = 'test_frac_outcome', selected_tab = input$alltabs, show_smoother = "no")
     }
     return(pl)
   }) #end function making testing plot
-  
-  
-  
-  
+
   
 } #end server function
 
