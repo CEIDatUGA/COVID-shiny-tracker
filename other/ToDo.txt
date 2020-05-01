@@ -1,9 +1,9 @@
 Things that could be done to improve app:
 
-* Update x-axis button/slider so we can either specify at which calendar day or which N to start
 * Make it such that when another location is added/removed, line colors for remaining stay the same (e.g. assign fixed color to each location based on row entry or similar, not based on relative order among selected locations).
 * add data source to tooltip
-* further plot improvements
-* add trend-lines and 1 and/or 2-week predictions based on simple smoothing/extrapolation
+* any further plot/legend improvements for better readability
+
+* Update x-axis button/slider so we can either specify at which calendar day or which N to start
 * further streamline code
 
