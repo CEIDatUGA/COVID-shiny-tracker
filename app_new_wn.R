@@ -10,6 +10,7 @@ library(plotly)
 library(RColorBrewer)
 library(tidyselect)
 
+options(shiny.sanitize.errors = FALSE)
 
 #################################
 # Load all data
