@@ -245,7 +245,7 @@ get_data <- function()
 ###########################################
 # function that re-reads the data every so often
 ###########################################
-all_data <- reactivePoll(intervalMillis = 1000*60*60*12, # pull new data every 12 hours
+all_data <- reactivePoll(intervalMillis = 1000*60*60*3, # pull new data every N hours
                          session = NULL,
                          checkFunc = function() {Sys.time()}, #this will always return a different value, which means at intervals specified by intervalMillis the new data will be pulled
                          valueFunc = function() {get_data()} )
