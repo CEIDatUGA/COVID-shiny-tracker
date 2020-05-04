@@ -11,7 +11,8 @@ library(RColorBrewer)
 library(tidyselect)
 
 #prevent shiny from overwriting our error message
-options(shiny.sanitize.errors = FALSE)
+#not used right now, using safeError below instead
+#options(shiny.sanitize.errors = FALSE)
 
 #################################
 # Load all data
@@ -577,7 +578,7 @@ server <- function(input, output, session) {
       else
       {
 
-      stop("Please select a different data source or location. The selected location(s) is not present in the chosen source")
+      stop(safeError("Please select a different data source or location. The selected location(s) is not present in the chosen source"))
       
       }
 
