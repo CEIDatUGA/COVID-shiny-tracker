@@ -49,11 +49,11 @@ get_data <- function()
     mutate(Daily_Hospitalized = c(0,diff(hospitalized))) %>% 
     mutate(Daily_Deaths = c(0,diff(death))) %>% rename(state_abr = state) %>%
     merge(us_popsize) %>%
-    rename(Date = date, Location = state_full, Population_Size = total_pop, Total_Deaths = death, 
+    rename(Date = date, Location = state, Population_Size = total_pop, Total_Deaths = death, 
            Total_Cases = positive, Total_Hospitalized = hospitalized, 
            Total_Test_Negative = negative, Total_Test_Positive = positive, Total_Test_All = total) %>%
     mutate(Daily_Cases = Daily_Test_Positive, Total_Cases = Total_Test_Positive) %>%
-    select(-c(state_abr,Total_Test_Negative,Daily_Test_Negative, state))
+    select(-c(state_abr,Total_Test_Negative,Daily_Test_Negative))
   
   #add all US by summing over all variables
   all_us <- us_ct_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
@@ -72,12 +72,11 @@ get_data <- function()
   # pull data from NYT and process
   #################################
   us_nyt_data <- readr::read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv")
-  nyt_popsize <- us_popsize %>% rename(state = state_full, state_abr = state)
   us_nyt_clean <- us_nyt_data %>% dplyr::select(c(date,state,cases,deaths)) %>%
     group_by(state) %>% arrange(date) %>%
     mutate(Daily_Cases = c(0,diff(cases))) %>% 
     mutate(Daily_Deaths = c(0,diff(deaths))) %>%
-    merge(nyt_popsize) %>%
+    merge(us_popsize) %>%
     rename(Date = date, Location = state, Population_Size = total_pop, Total_Deaths = deaths, 
            Total_Cases = cases)  %>%
     select(-state_abr)
@@ -108,7 +107,7 @@ get_data <- function()
     mutate(Daily_Cases = c(0,diff(Total_Cases))) %>% 
     rename(state_abr = State) %>%
     merge(us_popsize) %>%
-    rename(Location = state_full, Population_Size = total_pop) %>%
+    rename(Location = state, Population_Size = total_pop) %>%
     select(-c(state_abr))
   #Remove duplicates
   usafct_case_clean <- usafct_case_clean %>% distinct(Location, Date, .keep_all = TRUE)
@@ -126,13 +125,12 @@ get_data <- function()
     mutate(Daily_Deaths = c(0,diff(Total_Deaths))) %>% 
     rename(state_abr = State) %>%
     merge(us_popsize) %>%
-    rename(Location = state_full, Population_Size = total_pop) %>%
+    rename(Location = state, Population_Size = total_pop) %>%
     select(-state_abr, -Population_Size)
   #Remove duplicates
   usafct_death_clean <- usafct_death_clean %>% distinct(Location, Date, .keep_all = TRUE)
   
   usafct_clean <- left_join(usafct_case_clean, usafct_death_clean) %>%
-    select(-state) %>%
     group_by(Location) %>% arrange(Date)  %>%
     ungroup() %>%
     data.frame()
@@ -166,7 +164,7 @@ get_data <- function()
   us_jhu_deaths <- aggregate(. ~ Location, us_jhu_deaths, FUN = sum)
   us_jhu_deaths_clean <- gather(us_jhu_deaths, Date, Deaths, -Location)
   us_jhu_combined <- merge(us_jhu_cases_clean, us_jhu_deaths_clean)
-  us_jhu_popsize <- us_popsize %>% rename(Location = state_full)
+  us_jhu_popsize <- us_popsize %>% rename(Location = state)
   # This merge removes cruise ship cases/death counts
   us_jhu_merge <- merge(us_jhu_combined, us_jhu_popsize)
   us_jhu_clean <- us_jhu_merge %>% mutate(Date = as.Date(as.character(Date),format="%m/%d/%y")) %>%
@@ -175,7 +173,7 @@ get_data <- function()
     mutate(Daily_Deaths = c(0,diff(Deaths))) %>% 
     ungroup() %>%
     rename(Total_Deaths = Deaths, Total_Cases = Cases, Population_Size = total_pop) %>% 
-    select(-state) %>%
+    select(-state_abr) %>%
     data.frame()
   
   #add all US by summing over all variables
@@ -271,6 +269,12 @@ get_data <- function()
   
   
 } # end the get-data function which pulls data from the various online sources and processes/saves  
+
+
+#########################################################################################
+#     CODE MODIFIED TO LONG FORMAT ABOVE THIS BOX -> BELOW STILL IN PROGRESS            #
+#########################################################################################
+
 
 ###########################################
 # function that re-reads the data every so often
