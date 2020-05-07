@@ -63,8 +63,7 @@ get_data <- function()
   #reformat to long
   us_ct_clean <- gather(us_ct_clean, variable, value, -Location, -Population_Size, -Date)
   #aggregate repedative date + location entries
-  us_ct_clean <- aggregate(value ~ variable + Date + Location, us_ct_clean, FUN = sum) %>%
-    mutate(data_source = "covidtracking") %>%
+  us_ct_clean <- aggregate(value ~ variable + Date + Location, us_ct_clean, FUN = sum)
     data.frame()
   
   
@@ -85,10 +84,9 @@ get_data <- function()
   all_us <- us_nyt_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
   all_us$Location = "US"
   all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
-  us_nyt_clean = rbind(us_nyt_clean,all_us) %>%
-    mutate(data_source = "nyt_us")
+  us_nyt_clean = rbind(us_nyt_clean,all_us)
   #reformat to long
-  us_nyt_clean <- gather(us_nyt_clean, variable, value, -Location, -Population_Size, -Date, -data_source) %>%
+  us_nyt_clean <- gather(us_nyt_clean, variable, value, -Location, -Population_Size, -Date) %>%
     data.frame()
 
   #################################
@@ -139,10 +137,9 @@ get_data <- function()
   all_us <- usafct_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
   all_us$Location = "US"
   all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
-  usafct_clean = rbind(usafct_clean,all_us) %>%
-    mutate(data_source = "usafct")
+  usafct_clean = rbind(usafct_clean,all_us)
   #reformat to long
-  usafct_clean <- gather(usafct_clean, variable, value, -Location, -Population_Size, -Date, -data_source) %>%
+  usafct_clean <- gather(usafct_clean, variable, value, -Location, -Population_Size, -Date) %>%
     data.frame()
   
   
@@ -180,10 +177,9 @@ get_data <- function()
   all_us <- us_jhu_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
   all_us$Location = "US"
   all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
-  us_jhu_clean = rbind(us_jhu_clean,all_us) %>%
-    mutate(data_source = "jhu_us")
+  us_jhu_clean = rbind(us_jhu_clean,all_us)
   #reformat to long
-  us_jhu_clean <- gather(us_jhu_clean, variable, value, -Location, -Population_Size, -Date, -data_source) %>%
+  us_jhu_clean <- gather(us_jhu_clean, variable, value, -Location, -Population_Size, -Date) %>%
     data.frame()
   
     
@@ -209,11 +205,10 @@ get_data <- function()
     group_by(country) %>% arrange(date) %>%
     mutate(Daily_Cases = c(0,diff(cases))) %>%
     mutate(Daily_Deaths = c(0,diff(deaths))) %>%
-    mutate(data_source = "jhu_world") %>%
     ungroup() %>%
     rename(Date = date, Total_Deaths = deaths, Total_Cases = cases, Location = country, Population_Size = country_pop) 
   #reformat to long
-  world_jhu_clean <- gather(world_jhu_clean, variable, value, -Location, -Population_Size, -Date, -data_source) %>%  
+  world_jhu_clean <- gather(world_jhu_clean, variable, value, -Location, -Population_Size, -Date) %>%  
     data.frame()
   
   
@@ -227,10 +222,9 @@ get_data <- function()
     mutate(Location = recode(Location, "United States" = "US")) %>%
     mutate(Daily_Test_Positive = Daily_Cases ) %>% #assuming new cases means new positive tests
     mutate(Total_Test_Positive = Total_Cases ) %>%
-    mutate(data_source = "owid_world") %>%
     select( - contains('thousand'), - contains('million'))
   #reformat to long
-  world_owid_clean <- gather(world_owid_clean, variable, value, -Location, -Population_Size, -Date, -data_source) %>%
+  world_owid_clean <- gather(world_owid_clean, variable, value, -Location, -Population_Size, -Date) %>%
     data.frame()
  
   
@@ -269,12 +263,6 @@ get_data <- function()
   
   
 } # end the get-data function which pulls data from the various online sources and processes/saves  
-
-
-#########################################################################################
-#     CODE MODIFIED TO LONG FORMAT ABOVE THIS BOX -> BELOW STILL IN PROGRESS            #
-#########################################################################################
-
 
 ###########################################
 # function that re-reads the data every so often
@@ -492,8 +480,10 @@ server <- function(input, output, session) {
     
     out_type = paste(daily_tot,case_death,sep='_') #make string from UI inputs that correspond with variable names
     plot_dat <- all_plot_dat %>%   filter(Location %in% location_selector) %>%      #Only process data for locations that are  selected
-                               filter(source %in% source_selector) %>%
-                                mutate(outcome = get(out_type)) #pick output based on variable name created from UI
+                               filter(source %in% source_selector)
+    plot_dat <- spread(plot_dat, variable, value) %>% #respread the data for plotting purposes
+      mutate(outcome = get(out_type)) #pick output based on variable name created from UI
+    
     # do testing data for US
 
     if ( ('COVIDTracking' %in% source_selector) || ('OWID' %in% source_selector) )  
