@@ -4,6 +4,8 @@ Things that could be done to improve app:
 * add data source to tooltip
 * any further plot/legend improvements for better readability
 
+* Implement a 3rd tab that lets users look at counties for a selected state (cases/hosp/death only and only data sources that report county level info).
+
 * Update x-axis button/slider so we can either specify at which calendar day or which N to start
 * Rewrite code such that all data is stored in long format, with a column for variable name and one for value, instead of the current setup where each different variable (e.g. Daily_Deaths, Total_Cases) has its own column.
 * further streamline code
