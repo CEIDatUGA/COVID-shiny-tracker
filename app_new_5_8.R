@@ -63,7 +63,7 @@ get_data <- function()
   #reformat to long
   us_ct_clean <- gather(us_ct_clean, variable, value, -Location, -Population_Size, -Date)
   #aggregate repedative date + location entries
-  us_ct_clean <- aggregate(value ~ variable + Date + Location, us_ct_clean, FUN = sum)
+  us_ct_clean <- aggregate(value ~ variable + Date + Location + Population_Size, us_ct_clean, FUN = sum)
     data.frame()
   
   
