@@ -481,7 +481,7 @@ server <- function(input, output, session) {
     out_type = paste(daily_tot,case_death,sep='_') #make string from UI inputs that correspond with variable names
     plot_dat <- all_plot_dat %>%   filter(Location %in% location_selector) %>%      #Only process data for locations that are  selected
                                filter(source %in% source_selector)
-    plot_dat <- filter(plot_dat, variable == "get(out_type)") %>%
+    plot_dat <- filter(plot_dat, variable == out_type) %>%
                               mutate(outcome = value) %>%
                               select(-value)
     
@@ -496,11 +496,11 @@ server <- function(input, output, session) {
       plot_dat_filter <- all_plot_dat %>%   filter(Location %in% location_selector) %>%
         filter(source %in% source_selector)
       #To make test_outcome 
-      plot_dat_test <- filter(plot_dat_filter, variable == "get(test_out_type)") %>%
+      plot_dat_test <- filter(plot_dat_filter, variable == test_out_type) %>%
         mutate(test_outcome = value) %>%
         select(-value)
       #Make intermediate object to calculate test_frac_outcome
-      plot_dat_pos_type <- filter(plot_dat_filter, variable == "get(test_pos_type)") %>%
+      plot_dat_pos_type <- filter(plot_dat_filter, variable == test_pos_type) %>%
         mutate(test_pos_frac = value) %>%
         select(-value)
       #Merge datasets and mutate the final frac variable 
@@ -541,7 +541,7 @@ server <- function(input, output, session) {
       
       out_type2 = paste0("Total_",case_death) #make string from UI inputs that correspond to total and selected outcome
       plot_dat <- plot_dat %>% 
-        filter(get(out_type2) >= count_limit) %>%  
+        filter(out_type2 >= count_limit) %>%  
         mutate(Time = as.numeric(Date)) %>%
         group_by(Location) %>% 
         mutate(Time = Time - min(Time))
