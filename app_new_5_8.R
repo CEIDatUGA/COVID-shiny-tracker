@@ -49,21 +49,22 @@ get_data <- function()
     mutate(Daily_Hospitalized = c(0,diff(hospitalized))) %>% 
     mutate(Daily_Deaths = c(0,diff(death))) %>% rename(state_abr = state) %>%
     merge(us_popsize) %>%
-    rename(Date = date, Location = state, Population_Size = total_pop, Total_Deaths = death, 
+    rename(date = date, location = state, population_size = total_pop, Total_Deaths = death, 
            Total_Cases = positive, Total_Hospitalized = hospitalized, 
            Total_Test_Negative = negative, Total_Test_Positive = positive, Total_Test_All = total) %>%
     mutate(Daily_Cases = Daily_Test_Positive, Total_Cases = Total_Test_Positive) %>%
     select(-c(state_abr,Total_Test_Negative,Daily_Test_Negative))
   
   #add all US by summing over all variables
-  all_us <- us_ct_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
-  all_us$Location = "US"
-  all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
+  all_us <- us_ct_clean %>% group_by(date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+  all_us$location = "US"
+  all_us$population_size = max(all_us$population_size) #because of na.rm in sum, pop size only right at end
   us_ct_clean = rbind(us_ct_clean,all_us)
   #reformat to long
-  us_ct_clean <- gather(us_ct_clean, variable, value, -Location, -Population_Size, -Date)
+  us_ct_clean <- gather(us_ct_clean, variable, value, -location, -population_size, -date)
   #aggregate repedative date + location entries
-  us_ct_clean <- aggregate(value ~ variable + Date + Location + Population_Size, us_ct_clean, FUN = sum)
+  us_ct_clean <- aggregate(value ~ variable + date + location + population_size, us_ct_clean, FUN = sum) %>%
+    select(sort(names(.))) %>%
     data.frame()
   
   
@@ -76,17 +77,18 @@ get_data <- function()
     mutate(Daily_Cases = c(0,diff(cases))) %>% 
     mutate(Daily_Deaths = c(0,diff(deaths))) %>%
     merge(us_popsize) %>%
-    rename(Date = date, Location = state, Population_Size = total_pop, Total_Deaths = deaths, 
+    rename(date = date, location = state, population_size = total_pop, Total_Deaths = deaths, 
            Total_Cases = cases)  %>%
     select(-state_abr)
   
   #add all US by summing over all variables
-  all_us <- us_nyt_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
-  all_us$Location = "US"
-  all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
+  all_us <- us_nyt_clean %>% group_by(date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+  all_us$location = "US"
+  all_us$population_size = max(all_us$population_size) #because of na.rm in sum, pop size only right at end
   us_nyt_clean = rbind(us_nyt_clean,all_us)
   #reformat to long
-  us_nyt_clean <- gather(us_nyt_clean, variable, value, -Location, -Population_Size, -Date) %>%
+  us_nyt_clean <- gather(us_nyt_clean, variable, value, -location, -population_size, -date) %>%
+    select(sort(names(.))) %>%
     data.frame()
 
   #################################
@@ -105,10 +107,10 @@ get_data <- function()
     mutate(Daily_Cases = c(0,diff(Total_Cases))) %>% 
     rename(state_abr = State) %>%
     merge(us_popsize) %>%
-    rename(Location = state, Population_Size = total_pop) %>%
+    rename(location = state, population_size = total_pop, date = Date) %>%
     select(-c(state_abr))
   #Remove duplicates
-  usafct_case_clean <- usafct_case_clean %>% distinct(Location, Date, .keep_all = TRUE)
+  usafct_case_clean <- usafct_case_clean %>% distinct(location, date, .keep_all = TRUE)
   
   usafct_death_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_deaths_usafacts.csv")
   state_df = usafct_death_data %>% distinct(stateFIPS, .keep_all = TRUE) %>% select(3:4)
@@ -123,23 +125,24 @@ get_data <- function()
     mutate(Daily_Deaths = c(0,diff(Total_Deaths))) %>% 
     rename(state_abr = State) %>%
     merge(us_popsize) %>%
-    rename(Location = state, Population_Size = total_pop) %>%
-    select(-state_abr, -Population_Size)
+    rename(location = state, population_size = total_pop, date = Date) %>%
+    select(-state_abr, -population_size)
   #Remove duplicates
-  usafct_death_clean <- usafct_death_clean %>% distinct(Location, Date, .keep_all = TRUE)
+  usafct_death_clean <- usafct_death_clean %>% distinct(location, date, .keep_all = TRUE)
   
   usafct_clean <- left_join(usafct_case_clean, usafct_death_clean) %>%
-    group_by(Location) %>% arrange(Date)  %>%
+    group_by(location) %>% arrange(date)  %>%
     ungroup() %>%
     data.frame()
   
   #add all US by summing over all variables
-  all_us <- usafct_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
-  all_us$Location = "US"
-  all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
+  all_us <- usafct_clean %>% group_by(date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+  all_us$location = "US"
+  all_us$population_size = max(all_us$population_size) #because of na.rm in sum, pop size only right at end
   usafct_clean = rbind(usafct_clean,all_us)
   #reformat to long
-  usafct_clean <- gather(usafct_clean, variable, value, -Location, -Population_Size, -Date) %>%
+  usafct_clean <- gather(usafct_clean, variable, value, -location, -population_size, -date) %>%
+    select(sort(names(.))) %>%
     data.frame()
   
   
@@ -169,17 +172,18 @@ get_data <- function()
     mutate(Daily_Cases = c(0,diff(Cases))) %>%
     mutate(Daily_Deaths = c(0,diff(Deaths))) %>% 
     ungroup() %>%
-    rename(Total_Deaths = Deaths, Total_Cases = Cases, Population_Size = total_pop) %>% 
+    rename(Total_Deaths = Deaths, Total_Cases = Cases, population_size = total_pop, date = Date, location = Location) %>% 
     select(-state_abr) %>%
     data.frame()
   
   #add all US by summing over all variables
-  all_us <- us_jhu_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
-  all_us$Location = "US"
-  all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
+  all_us <- us_jhu_clean %>% group_by(date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+  all_us$location = "US"
+  all_us$population_size = max(all_us$population_size) #because of na.rm in sum, pop size only right at end
   us_jhu_clean = rbind(us_jhu_clean,all_us)
   #reformat to long
-  us_jhu_clean <- gather(us_jhu_clean, variable, value, -Location, -Population_Size, -Date) %>%
+  us_jhu_clean <- gather(us_jhu_clean, variable, value, -location, -population_size, -date) %>%
+    select(sort(names(.))) %>%
     data.frame()
   
     
@@ -206,9 +210,10 @@ get_data <- function()
     mutate(Daily_Cases = c(0,diff(cases))) %>%
     mutate(Daily_Deaths = c(0,diff(deaths))) %>%
     ungroup() %>%
-    rename(Date = date, Total_Deaths = deaths, Total_Cases = cases, Location = country, Population_Size = country_pop) 
+    rename(date = date, Total_Deaths = deaths, Total_Cases = cases,location = country, population_size = country_pop) 
   #reformat to long
-  world_jhu_clean <- gather(world_jhu_clean, variable, value, -Location, -Population_Size, -Date) %>%  
+  world_jhu_clean <- gather(world_jhu_clean, variable, value, -location, -population_size, -date) %>%  
+    select(sort(names(.))) %>%
     data.frame()
   
   
@@ -217,14 +222,15 @@ get_data <- function()
   #################################
   owid_data <- readr::read_csv("https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/owid-covid-data.csv")
   world_owid_clean <- owid_data %>% dplyr::select(-tests_units, -iso_code) %>%
-    rename(Total_Cases = total_cases, Total_Deaths = total_deaths, Daily_Cases = new_cases, Daily_Deaths = new_deaths, Location = location, Date = date, Daily_Test_All = new_tests, Total_Test_All = total_tests) %>% 
-    mutate(Population_Size = Total_Cases / total_cases_per_million * 1000000) %>% #back-calculate population size
-    mutate(Location = recode(Location, "United States" = "US")) %>%
+    rename(Total_Cases = total_cases, Total_Deaths = total_deaths, Daily_Cases = new_cases, Daily_Deaths = new_deaths, location = location, date = date, Daily_Test_All = new_tests, Total_Test_All = total_tests) %>% 
+    mutate(population_size = Total_Cases / total_cases_per_million * 1000000) %>% #back-calculate population size
+    mutate(location = recode(location, "United States" = "US")) %>%
     mutate(Daily_Test_Positive = Daily_Cases ) %>% #assuming new cases means new positive tests
     mutate(Total_Test_Positive = Total_Cases ) %>%
     select( - contains('thousand'), - contains('million'))
   #reformat to long
-  world_owid_clean <- gather(world_owid_clean, variable, value, -Location, -Population_Size, -Date) %>%
+  world_owid_clean <- gather(world_owid_clean, variable, value, -location, -population_size, -date) %>%
+    select(sort(names(.))) %>%
     data.frame()
  
   
@@ -281,8 +287,8 @@ us_dat = all_dat$us_dat
 
 
 #define variables for location and source selectors
-state_var = unique(us_dat$Location)
-country_var = sort(unique(world_dat$Location))
+state_var = unique(us_dat$location)
+country_var = sort(unique(world_dat$location))
 
 us_source_var = unique(us_dat$source)
 world_source_var = unique(world_dat$source)
@@ -479,7 +485,7 @@ server <- function(input, output, session) {
   {
     
     out_type = paste(daily_tot,case_death,sep='_') #make string from UI inputs that correspond with variable names
-    plot_dat <- all_plot_dat %>%   filter(Location %in% location_selector) %>%      #Only process data for locations that are  selected
+    plot_dat <- all_plot_dat %>%   filter(location %in% location_selector) %>%      #Only process data for locations that are  selected
                                filter(source %in% source_selector)
     plot_dat <- filter(plot_dat, variable == out_type) %>%
                               mutate(outcome = value) %>%
@@ -493,7 +499,7 @@ server <- function(input, output, session) {
       test_out_type = paste(daily_tot,'Test_All',sep='_')
       test_pos_type = paste(daily_tot,'Test_Positive',sep='_')
       #To make filtered data set by location and sources
-      plot_dat_filter <- all_plot_dat %>%   filter(Location %in% location_selector) %>%
+      plot_dat_filter <- all_plot_dat %>%   filter(location %in% location_selector) %>%
         filter(source %in% source_selector)
       #To make test_outcome 
       plot_dat_test <- filter(plot_dat_filter, variable == test_out_type) %>%
@@ -504,10 +510,10 @@ server <- function(input, output, session) {
         mutate(test_pos_frac = value) %>%
         select(-value)
       #Merge datasets and mutate the final frac variable 
-      test_merge <- merge(plot_dat_test, plot_dat_pos_type, by = c("Date", "Location", "source")) %>%
+      test_merge <- merge(plot_dat_test, plot_dat_pos_type, by = c("date", "location", "source")) %>%
         mutate(test_frac_outcome = test_pos_frac/test_outcome)
       #Merge with plot_dat
-      plot_dat <- merge(plot_dat, test_merge, by = c("Date", "Location", "source"))
+      plot_dat <- merge(plot_dat, test_merge, by = c("date", "location", "source"))
     }
  
     #set labels and tool tips based on input - entries 2 and 3 are ignored for world plot
@@ -542,17 +548,17 @@ server <- function(input, output, session) {
       out_type2 = paste0("Total_",case_death) #make string from UI inputs that correspond to total and selected outcome
       plot_dat <- plot_dat %>% 
         filter(out_type2 >= count_limit) %>%  
-        mutate(Time = as.numeric(Date)) %>%
-        group_by(Location) %>% 
+        mutate(Time = as.numeric(date)) %>%
+        group_by(location) %>% 
         mutate(Time = Time - min(Time))
       
     }
     else
     {
-      plot_dat <- plot_dat %>% mutate(Time = Date)
+      plot_dat <- plot_dat %>% mutate(Time = date)
     }
     #sort dates for plotting
-    plot_dat <- plot_dat %>% group_by(Location) %>% arrange(Time) %>% ungroup()
+    plot_dat <- plot_dat %>% group_by(location) %>% arrange(Time) %>% ungroup()
     
     list(plot_dat, y_labels, tool_tip) #return list
   } #end function that produces output for plots
@@ -582,16 +588,16 @@ server <- function(input, output, session) {
     #fit <- loess(apple_data$raw_value ~ apple_data$time, degree=1, span = 0.3, data=apple_data)
     #apple_data <- apple_data %>%    mutate(rel_beta_change = fit$fitted)
     
-    ncols = max(3,length(unique(p_dat$Location)))
-    tooltip_text = paste(paste0("Location: ", p_dat$Location), 
-                         paste0(tool_tip[1], ": ", p_dat$Date), 
+    ncols = max(3,length(unique(p_dat$location)))
+    tooltip_text = paste(paste0("Location: ", p_dat$location), 
+                         paste0(tool_tip[1], ": ", p_dat$date), 
                          paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
     pl <- plotly::plot_ly(p_dat) %>% 
           plotly::add_trace(x = ~Time, y = ~get(outname), type = 'scatter', 
                                  mode = 'lines+markers', 
-                                 linetype = ~source, symbol = ~Location,
+                                 linetype = ~source, symbol = ~location,
                                  line = list(width = linesize), text = tooltip_text, 
-                                 color = ~Location, colors = brewer.pal(ncols, "Dark2")) %>%
+                                 color = ~location, colors = brewer.pal(ncols, "Dark2")) %>%
                                  layout(yaxis = list(title=plot_list[[2]][ylabel], type = yscale, size = 18)) 
 
     # if requested by user, apply and show a smoothing function for case/hosp/death data
@@ -599,17 +605,17 @@ server <- function(input, output, session) {
     if (outname == "outcome" && show_smoother == "Yes")
     {
       
-      if (any(location_selector %in% p_dat$Location))
+      if (any(location_selector %in% p_dat$location))
       {
-        p_dat2 <- p_dat  %>% select(Location,source,outcome,Time)%>% drop_na() %>%
-          group_by(Location) %>%
+        p_dat2 <- p_dat  %>% select(location,source,outcome,Time)%>% drop_na() %>%
+          group_by(location) %>%
           filter(n() >= 2) %>%  
           mutate(smoother = loess(outcome ~ as.numeric(Time), span = .4)$fitted) %>%    
           ungroup()
         
         
         pl <- pl %>% plotly::add_lines(x = ~Time, y = ~smoother, 
-                                       color = ~Location, data = p_dat2, 
+                                       color = ~location, data = p_dat2, 
                                        line = list( width = 2*linesize),
                                        opacity=0.3,
                                        showlegend = FALSE) 
