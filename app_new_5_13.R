@@ -316,7 +316,7 @@ ui <- fluidPage(
                            shiny::div("Modify the top two plots to display total counts or values scaled by the state/territory population size."),
                            br(),
                            shiny::selectInput("xscale", "Set x-axis to calendar date or days since a specified total number of cases/hospitalizations/deaths", c("Calendar Date" = "x_time", "Days since N cases/hospitalizations/deaths" = "x_count")),
-                           sliderInput(  inputId = "count_limit", "Select a date or outcome value from which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-01-22","%Y-%m-%d")),
+                           sliderInput(inputId = "x_limit", "Select a date or outcome value from which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") ),
                            shiny::div("Modify all three plots to begin at a specified starting date or outcome value designated in the slider above."),
                            br(),
                            shiny::selectInput(  "yscale", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
@@ -339,7 +339,7 @@ ui <- fluidPage(
                         sidebarLayout(
                           sidebarPanel(
                             #Country selector coding with US, Italy, and Spain as always selected for a defult setting, will flash an error with none selected
-                            shinyWidgets::pickerInput("country_selector", "Select countries", country_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("US", "Italy", "Spain")                        ),
+                            shinyWidgets::pickerInput("country_selector", "Select countries", country_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("US", "United Kingdom", "Germany")),
                             shinyWidgets::pickerInput("source_selector_w", "Select Source(s)", world_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") ),
                             shiny::div("Choose data sources (see 'About' tab for details)."),
                             br(),
@@ -356,8 +356,8 @@ ui <- fluidPage(
                             shiny::div("Modify the plot to display total counts or values scaled by the country population size."),
                             br(),
                             shiny::selectInput("xscale_w", "Set x-axis to calendar date or days since a specified total number of cases/deaths", c("Calendar Date" = "x_time", "Days since N cases/hospitalizations/deaths" = "x_count")),
-                            sliderInput(  inputId = "count_limit_w", "Choose the number of cases/deaths at which to start graphs", min = 1,  max = 500, value = 10 ),
-                            shiny::div("Modify all the plot to show data with x-axis as calender date or days since a country reported a specified total number of cases/deaths, specified by the slider above. The slider above does not have an impact for calendar date on the x-axis."),
+                            sliderInput(inputId = "x_limit_w", "Select a date or outcome value from which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") ),
+                            shiny::div("Modify all three plots to begin at a specified starting date or outcome value designated in the slider above."),
                             br(),
                             shiny::selectInput(  "yscale_w", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
                             shiny::div("Modify the plot to show data on a linear or logarithmic scale."),
@@ -468,6 +468,32 @@ ui <- fluidPage(
 ###########################################
 server <- function(input, output, session) {
 
+  #watch the choice for the x-scale and choose what to show underneath accordingly
+  observeEvent(input$xscale,
+               {
+                 if (input$xscale == 'x_count')
+                 {
+                   #Add a reactive range to slider
+                   shiny::updateSliderInput(session, "x_limit", min = 1,  max = 500, step = 10, value = 1 )
+                 } else
+                 {
+                   shiny::updateSliderInput(session, "x_limit", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") )
+                 }
+               }) #end observe event  
+  
+  #watch the choice for the x-scale and choose what to show underneath accordingly
+  observeEvent(input$xscale_w,
+               {
+                 if (input$xscale_w == 'x_count')
+                 {
+                   #Add a reactive range to slider
+                   shiny::updateSliderInput(session, "x_limit_w", min = 1,  max = 500, step = 10, value = 1 )
+                 } else
+                 {
+                   shiny::updateSliderInput(session, "x_limit_w", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") )
+                 }
+               }) #end observe event  
+  
   
 
   ###########################################
@@ -475,7 +501,7 @@ server <- function(input, output, session) {
   # uses plotly
   ###########################################
   make_plotly <- function(all_plot_dat, location_selector, source_selector,case_death, daily_tot,
-                              xscale, yscale, absolute_scaled, count_limit, current_tab,  
+                              xscale, yscale, absolute_scaled, x_limit, current_tab,  
                               show_smoother, ylabel, outtype)
   {
 
@@ -492,9 +518,42 @@ server <- function(input, output, session) {
     }
     
     #filter data based on user selections
+    #keep all outcomes/variables for now so we can do x-axis adjustment
+    #filtering of only the outcome to plot is done after x-scale adjustment
     plot_dat <- all_plot_dat %>%   filter(location %in% location_selector) %>%      
-                                   filter(source %in% source_selector) %>% 
-                                   filter(variable %in% outcome) 
+                                   filter(source %in% source_selector) %>%
+                                   group_by(source,location) %>%
+                                   arrange(date) %>%
+                                   ungroup()
+    
+    #adjust x-axis as needed 
+    if (xscale == 'x_count')
+    {
+      #filter by count limit
+      out_type2 = paste0("Total_",case_death) #make string from UI inputs that correspond to total and selected outcome
+      start_dates <- plot_dat %>% 
+        filter(variable == out_type2) %>% #get the quantity (cases/hosp/death) which is used to define start
+        filter( value >= x_limit) %>% #remove all values that are below threshold
+        group_by(source,location) %>%   #group by states
+        summarize(start_date = first(date))   #get first date for each state after filtering. for this to work right, the data needs to be sorted by date for each source/location combination
+      
+      plot_dat <-  plot_dat %>% left_join(start_dates, by = c("source", "location")) %>% #add start dates to data
+                   filter(variable %in% outcome) %>% #retain only outcome variable
+                   filter(date >= start_date)  %>%      
+                   mutate(time = as.numeric(date)) %>%
+                   group_by(source, location) %>% 
+                   mutate(time = time - min(time)) %>%
+                   ungroup()
+    }
+    else
+    {
+      #filter by date limit
+      plot_dat <- plot_dat %>% mutate(time = date) %>%
+                  filter(variable %in% outcome) %>%
+                  filter(date >= x_limit) 
+    }
+    
+     
     
     
     #set labels and tool tips based on input - entries 2 and 3 are ignored for world plot
@@ -514,28 +573,7 @@ server <- function(input, output, session) {
       y_labels[2] <- paste0(y_labels[2], " per 100K")
     } #end scaling function
      
-    #adjust data to align for plotting by cases on x-axis. 
-    if (xscale == 'x_count')
-    {
-      #Add a reactive range to slider
-      shiny::updateSliderInput(session, "count_limit", min = 1,  max = 500, step = 10 )
-      
-      #filter by count limit
-      out_type2 = paste0("Total_",case_death) #make string from UI inputs that correspond to total and selected outcome
-      plot_dat <- plot_dat %>% 
-        filter(out_type2 >= count_limit) %>%  
-        mutate(time = as.numeric(date)) %>%
-        group_by(location) %>% 
-        mutate(time = time - min(time))
-    }
-    else
-    {
-      #Allows slider to return to date format 
-      shiny::updateSliderInput(session, "count_limit", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), step = Sys.Date())
-       #filter by date limit
-      plot_dat <- plot_dat %>% mutate(time = date) %>%
-         filter(date >= count_limit)
-    }
+    
 
     p_dat <- plot_dat
     #the US test plots can only be created using the COVIDtracking data
@@ -549,10 +587,7 @@ server <- function(input, output, session) {
     {
       p_dat <- plot_dat %>% filter(source == "OWID")
     }
-
-    #sort dates for plotting
-    p_dat <- p_dat %>% group_by(location) %>% arrange(time) %>% ungroup()
-        
+       
     linesize = 1.5
     ncols = max(3,length(unique(p_dat$location))) #number of colors for plotting
     
@@ -605,7 +640,7 @@ server <- function(input, output, session) {
     {
     #create plot
     pl <- make_plotly(us_dat, input$state_selector, input$source_selector, input$case_death, input$daily_tot,
-                              input$xscale, input$yscale, input$absolute_scaled, input$count_limit, input$current_tab,
+                              input$xscale, input$yscale, input$absolute_scaled, input$x_limit, input$current_tab,
                               input$show_smoother, ylabel = 1, outtype = '')
     }
     return(pl)
@@ -619,7 +654,7 @@ server <- function(input, output, session) {
     if ('COVIDTracking' %in% input$source_selector)
     {
       pl <- make_plotly(us_dat, input$state_selector, input$source_selector, input$case_death, input$daily_tot,
-                        input$xscale, input$yscale, input$absolute_scaled, input$count_limit, input$current_tab,
+                        input$xscale, input$yscale, input$absolute_scaled, input$x_limit, input$current_tab,
                         input$show_smoother, ylabel = 2, outtype = 'Test_All')
     }
     return(pl)
@@ -633,7 +668,7 @@ server <- function(input, output, session) {
       if ('COVIDTracking' %in% input$source_selector)
       {
         pl <- make_plotly(us_dat, input$state_selector, input$source_selector, input$case_death, input$daily_tot,
-                          input$xscale, input$yscale, input$absolute_scaled, input$count_limit, input$current_tab,
+                          input$xscale, input$yscale, input$absolute_scaled, input$x_limit, input$current_tab,
                           input$show_smoother, ylabel = 3, outtype = 'Test_Positive')
         
       }
@@ -648,7 +683,7 @@ server <- function(input, output, session) {
     if (!is.null(input$source_selector_w))
     {
       pl <- make_plotly(world_dat, input$country_selector, input$source_selector_w, input$case_death_w, input$daily_tot_w,
-                        input$xscale_w, input$yscale_w, input$absolute_scaled_w, input$count_limit_w, input$current_tab,
+                        input$xscale_w, input$yscale_w, input$absolute_scaled_w, input$x_limit_w, input$current_tab,
                         input$show_smoother_w, ylabel = 1, outtype = '')
     }
     return(pl)
@@ -663,7 +698,7 @@ server <- function(input, output, session) {
     {
       #create plot
       pl <- make_plotly(world_dat, input$country_selector, input$source_selector_w, input$case_death_w, input$daily_tot_w,
-                        input$xscale_w, input$yscale_w, input$absolute_scaled_w, input$count_limit_w, input$current_tab,
+                        input$xscale_w, input$yscale_w, input$absolute_scaled_w, input$x_limit_w, input$current_tab,
                         input$show_smoother_w, ylabel = 2, outtype = 'Test_All')
     }
     return(pl)
@@ -678,7 +713,7 @@ server <- function(input, output, session) {
     if ('OWID' %in% input$source_selector_w)
     {
       pl <- make_plotly(world_dat, input$country_selector, input$source_selector_w, input$case_death_w, input$daily_tot_w,
-                        input$xscale_w, input$yscale_w, input$absolute_scaled_w, input$count_limit_w, input$current_tab,
+                        input$xscale_w, input$yscale_w, input$absolute_scaled_w, input$x_limit_w, input$current_tab,
                         input$show_smoother_w, ylabel = 3, outtype = 'Test_Positive')
     }
     return(pl)
