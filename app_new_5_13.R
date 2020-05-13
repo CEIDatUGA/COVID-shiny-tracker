@@ -53,6 +53,8 @@ get_data <- function()
            Total_Cases = positive, Total_Hospitalized = hospitalized, 
            Total_Test_Negative = negative, Total_Test_Positive = positive, Total_Test_All = total) %>%
     mutate(Daily_Cases = Daily_Test_Positive, Total_Cases = Total_Test_Positive) %>%
+    mutate(Daily_Positive_Prop = Daily_Test_Positive / Daily_Test_All) %>%
+    mutate(Total_Positive_Prop = Total_Test_Positive / Total_Test_All) %>%
     select(-c(state_abr,Total_Test_Negative,Daily_Test_Negative))
   
   #add all US by summing over all variables
@@ -215,6 +217,8 @@ get_data <- function()
     mutate(Location = recode(Location, "United States" = "US")) %>%
     mutate(Daily_Test_Positive = Daily_Cases ) %>% #assuming new cases means new positive tests
     mutate(Total_Test_Positive = Total_Cases ) %>%
+    mutate(Daily_Positive_Prop = Daily_Test_Positive / Daily_Test_All) %>%
+    mutate(Total_Positive_Prop = Total_Test_Positive / Total_Test_All) %>%
     select( - contains('thousand'), - contains('million'))
   #reformat to long
   world_owid_clean <- gather(world_owid_clean, variable, value, -Location, -Population_Size, -Date)
@@ -512,9 +516,9 @@ server <- function(input, output, session) {
     {
       outcome = paste(daily_tot,outtype,sep="_")
     }
-    if (outtype == "Test_Positive") 
+    if (outtype == "Positive_Prop") 
     {
-      outcome = paste(daily_tot,outtype,sep="_")
+      outcome = paste(daily_tot,outtype,sep="_") 
     }
     
     #filter data based on user selections
@@ -577,13 +581,13 @@ server <- function(input, output, session) {
 
     p_dat <- plot_dat
     #the US test plots can only be created using the COVIDtracking data
-    if (current_tab == "us" && (outtype == "Test_All" || outtype == "Test_positive")) 
+    if (current_tab == "us" && (outtype == "Test_All" || outtype == "Positive_Prop")) 
     {
       p_dat <- plot_dat %>% filter(source == "COVIDTracking")
       
     }
     #the world test plots can only be created using the OWID data
-    if (current_tab == "world" && (outtype == "Test_All" || outtype == "Test_positive"))
+    if (current_tab == "world" && (outtype == "Test_All" || outtype == "Positive_Prop"))
     {
       p_dat <- plot_dat %>% filter(source == "OWID")
     }
@@ -669,7 +673,7 @@ server <- function(input, output, session) {
       {
         pl <- make_plotly(us_dat, input$state_selector, input$source_selector, input$case_death, input$daily_tot,
                           input$xscale, input$yscale, input$absolute_scaled, input$x_limit, input$current_tab,
-                          input$show_smoother, ylabel = 3, outtype = 'Test_Positive')
+                          input$show_smoother, ylabel = 3, outtype = 'Positive_Prop')
         
       }
       return(pl)
@@ -714,7 +718,7 @@ server <- function(input, output, session) {
     {
       pl <- make_plotly(world_dat, input$country_selector, input$source_selector_w, input$case_death_w, input$daily_tot_w,
                         input$xscale_w, input$yscale_w, input$absolute_scaled_w, input$x_limit_w, input$current_tab,
-                        input$show_smoother_w, ylabel = 3, outtype = 'Test_Positive')
+                        input$show_smoother_w, ylabel = 3, outtype = 'Positive_Prop')
     }
     return(pl)
   }) #end function making testing plot
