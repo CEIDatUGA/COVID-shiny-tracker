@@ -66,6 +66,8 @@ get_data <- function()
   us_ct_clean <- gather(us_ct_clean, variable, value, -Location, -Population_Size, -Date)
   #aggregate repedative date + location entries
   us_ct_clean <- aggregate(value ~ variable + Date + Location + Population_Size, us_ct_clean, FUN = sum)
+  us_ct_clean$value[!is.finite(us_ct_clean$value)] <- NA
+  us_ct_clean[!is.na(us_ct_clean$value), ]
   
   
   #################################
