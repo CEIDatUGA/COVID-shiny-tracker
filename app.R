@@ -609,7 +609,8 @@ server <- function(input, output, session) {
                                  linetype = ~source, symbol = ~location,
                                  line = list(width = linesize), text = tooltip_text, 
                                  color = ~location, colors = brewer.pal(ncols, "Dark2")) %>%
-                                 layout(yaxis = list(title=y_labels[ylabel], type = yscale, size = 18)) 
+                          layout(yaxis = list(title=y_labels[ylabel], type = yscale, size = 18)) %>%
+                          layout(legend = list(orientation = "h", x = 0.2, y = -0.2))
 
     # if requested by user, apply and show a smoothing function 
     if (show_smoother == "Yes")
