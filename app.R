@@ -58,10 +58,17 @@ get_data <- function()
     select(-c(state_abr,Total_Test_Negative,Daily_Test_Negative))
   
   #add all US by summing over all variables
-  all_us <- us_ct_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
-  all_us$Location = "US"
-  all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
+  #adding is not right approach for proportion test positive, so need to recompute
+  all_us <- us_ct_clean %>% group_by(Date) %>% 
+                            summarize_if(is.numeric, sum, na.rm=TRUE) %>%
+                            mutate(Location = "US") %>%
+                            mutate(Population_Size = max(Population_Size)) %>%
+                            mutate(Daily_Positive_Prop = Daily_Test_Positive / Daily_Test_All) %>%
+                            mutate(Total_Positive_Prop = Total_Test_Positive / Total_Test_All) 
+    
+  
   us_ct_clean = rbind(us_ct_clean,all_us)
+  
   #reformat to long
   us_ct_clean <- gather(us_ct_clean, variable, value, -Location, -Population_Size, -Date)
   #aggregate repedative date + location entries
@@ -285,7 +292,8 @@ us_dat = all_dat$us_dat
 
 
 #define variables for location and source selectors
-state_var = sort(unique(us_dat$location))
+state_var = sort(unique(us_dat$location))  
+state_var = c("US",state_var[!state_var=="US"]) #move US to front
 country_var = sort(unique(world_dat$location))
 
 us_source_var = unique(us_dat$source)
@@ -304,7 +312,7 @@ ui <- fluidPage(
                        sidebarLayout(
                          sidebarPanel(
                            shinyWidgets::pickerInput("state_selector", "Select State(s)", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("Georgia","California","Washington") ),
-                           shiny::div("US is at end of state list."),
+                           shiny::div("US is at start of state list."),
                            br(),
                            shinyWidgets::pickerInput("source_selector", "Select Source(s)", us_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("COVIDTracking") ),
                           shiny::div("Choose data sources (see 'About' tab for details)."),
@@ -572,7 +580,8 @@ server <- function(input, output, session) {
     
        
     #if we want scaling by 100K, do extra scaling 
-    if (absolute_scaled == 'scaled')
+    # don't apply to test proportion
+    if ((absolute_scaled == 'scaled') && (outtype != "Positive_Prop"))
     {
       plot_dat <- plot_dat %>% mutate(value = value / populationsize * 100000) 
       y_labels[1] <- paste0(y_labels[1], " per 100K")
@@ -610,7 +619,7 @@ server <- function(input, output, session) {
                                  line = list(width = linesize), text = tooltip_text, 
                                  color = ~location, colors = brewer.pal(ncols, "Dark2")) %>%
                           layout(yaxis = list(title=y_labels[ylabel], type = yscale, size = 18)) %>%
-                          layout(legend = list(orientation = "h", x = 0.2, y = -0.2))
+                          layout(legend = list(orientation = "h", x = 0.2, y = -0.3))
 
     # if requested by user, apply and show a smoothing function 
     if (show_smoother == "Yes")
