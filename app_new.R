@@ -414,7 +414,8 @@ ui <- fluidPage(
                         sidebarLayout(
                           sidebarPanel(
                             #County selector in progress...
-                            shinyWidgets::pickerInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("Clarke")),
+                            shinyWidgets::pickerInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("NULL")),
+                            shinyWidgets::pickerInput("state_selector_c", "Select states", state_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("Georgia")),
                             shinyWidgets::pickerInput("source_selector_c", "Select Source(s)", county_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") ),
                             shiny::div("Choose data sources (see 'About' tab for details)."),
                             br(),
@@ -565,7 +566,7 @@ server <- function(input, output, session) {
                }) #end observe event 
   
   #watch the choice for the x-scale and choose what to show underneath accordingly
-  observeEvent(input$xscale_w,
+  observeEvent(input$xscale_c,
                {
                  if (input$xscale_c == 'x_count')
                  {
@@ -576,6 +577,15 @@ server <- function(input, output, session) {
                    shiny::updateSliderInput(session, "x_limit_c", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") )
                  }
                }) #end observe event  
+  
+  #watch state_selector_c to reduce the picker options in the county dropdown limited to those within the selected state(s)
+  observeEvent(input$state_selector_c,
+               {
+                  #redesignate county_dat to match the state selector inour
+                   county_dat_sub <- county_dat %>% filter(state %in% input$state_selector_c)
+                   county_var_sub = sort(unique(county_dat_sub$location))
+                   shinyWidgets::updatePickerInput(session, "county_selector", "Select counties", county_var_sub, selected = c("NULL"))
+             })
   
 
   ###########################################
