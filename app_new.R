@@ -173,7 +173,7 @@ get_data <- function()
   # This merge removes cruise ship cases/death counts
   us_jhu_merge <- merge(us_jhu_combined, us_jhu_popsize)
   us_jhu_clean <- us_jhu_merge %>% mutate(Date = as.Date(as.character(Date),format="%m/%d/%y")) %>%
-    group_by(Location) %>% arrange(Date) %>%
+    group_by(Location, Admin2) %>% arrange(Date) %>%
     mutate(Daily_Cases = c(0,diff(Cases))) %>%
     mutate(Daily_Deaths = c(0,diff(Deaths))) %>% 
     ungroup() %>%
@@ -581,7 +581,7 @@ server <- function(input, output, session) {
   #watch state_selector_c to reduce the picker options in the county dropdown limited to those within the selected state(s)
   observeEvent(input$state_selector_c,
                {
-                  #redesignate county_dat to match the state selector inour
+                  #redesignate county_dat to match the state selector input
                    county_dat_sub <- county_dat %>% filter(state %in% input$state_selector_c)
                    county_var_sub = sort(unique(county_dat_sub$location))
                    shinyWidgets::updatePickerInput(session, "county_selector", "Select counties", county_var_sub, selected = c("NULL"))
@@ -610,14 +610,29 @@ server <- function(input, output, session) {
     }
 
     
-    #filter data based on user selections
-    #keep all outcomes/variables for now so we can do x-axis adjustment
-    #filtering of only the outcome to plot is done after x-scale adjustment
-    plot_dat <- all_plot_dat %>%   filter(location %in% location_selector) %>%      
+    if (current_tab == "county")
+    {
+      #add an additional line of filtering when using the county tab to prevent double stacking of data from counties that share the same name in multiple states
+      #sort remaining data as done for us and world plots
+      plot_dat <- all_plot_dat %>% filter(state %in% input$state_selector_c) %>%
+                                   filter(location %in% location_selector) %>%      
                                    filter(source %in% source_selector) %>%
                                    group_by(source,location) %>%
                                    arrange(date) %>%
                                    ungroup()
+    }
+    else
+    {
+      #filter data based on user selections
+      #keep all outcomes/variables for now so we can do x-axis adjustment
+      #filtering of only the outcome to plot is done after x-scale adjustment
+      plot_dat <- all_plot_dat %>%   filter(location %in% location_selector) %>%      
+                                     filter(source %in% source_selector) %>%
+                                     group_by(source,location) %>%
+                                     arrange(date) %>%
+                                     ungroup()
+    }
+
     
     #adjust x-axis as needed 
     if (xscale == 'x_count')
