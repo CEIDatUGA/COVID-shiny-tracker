@@ -415,7 +415,7 @@ ui <- fluidPage(
                           sidebarPanel(
                             #County selector in progress...
                             shinyWidgets::pickerInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("NULL")),
-                            shinyWidgets::pickerInput("state_selector_c", "Select states", state_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("Georgia")),
+                            shinyWidgets::pickerInput("state_selector_c", "Select states", state_var,  multiple = FALSE, options = list(`actions-box` = TRUE), selected = c("Georgia")),
                             shinyWidgets::pickerInput("source_selector_c", "Select Source(s)", county_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") ),
                             shiny::div("Choose data sources (see 'About' tab for details)."),
                             br(),
