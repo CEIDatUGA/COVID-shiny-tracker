@@ -32,7 +32,8 @@ get_data <- function()
   
   #data for population size for each state/country so we can compute cases per 100K
   us_popsize <- readRDS(here("data","us_popsize.rds")) %>% rename(state_abr = state, state = state_full)
-  world_popsize <-readRDS(here("data","world_popsize.rds")) 
+  world_popsize <-readRDS(here("data","world_popsize.rds"))
+  county_popsize <- readRDS(here("data", "county_popsize.rds"))
   
   all_data = list() #will save and return all datasets as list
   
@@ -189,7 +190,11 @@ get_data <- function()
   #reformat to long
   county_jhu_clean <- gather(us_jhu_clean, variable, value, -Location, -Population_Size, -Date, -FIPS, -county_name) 
   us_jhu_clean <- county_jhu_clean %>% select(-FIPS, -county_name)  
-    
+  #modify county pops
+  county_jhu_clean <- merge(county_jhu_clean, county_popsize) %>%
+    select(-Population_Size) %>%
+    rename(Population_Size = population_size)
+  
   #################################
   # pull world data from JHU github and process
   #################################

@@ -9,6 +9,7 @@ output: html_document
 
 library(tidyverse)
 library(readxl)
+library(tm)
 
 ```
 
@@ -37,4 +38,19 @@ us_pop <- readxl::read_excel("./us_pop.xlsx")
 ```{r}
 saveRDS(us_pop, file = "../us_popsize.rds")
 ```
+
+```{r}
+#create county level population data from 2019 census database
+remove_words <- c("County", "Parish", "city", "City", "Census Area", "Borough", "Municipality")
+county_pop <- readxl::read_excel("./county_pop.xlsx")
+county_pop$county_name <- gsub('^.', '', county_pop$county_name)
+county_pop$county_name <- removeWords(county_pop$county_name, remove_words)
+county_pop <- separate(county_pop, col = county_name, into = c("county_name","Location"), sep = " , ")
+
+saveRDS(county_pop, file = "../../data/county_popsize.rds")
+```
+
+```{r}
+```
+
 
