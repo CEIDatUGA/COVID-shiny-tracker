@@ -50,7 +50,5 @@ county_pop <- separate(county_pop, col = county_name, into = c("county_name","Lo
 saveRDS(county_pop, file = "../../data/county_popsize.rds")
 ```
 
-```{r}
-```
 
 

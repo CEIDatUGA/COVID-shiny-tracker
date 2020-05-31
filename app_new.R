@@ -9,6 +9,7 @@ library(ggplot2)
 library(plotly)
 library(RColorBrewer)
 library(tidyselect)
+library(tm)
 
 #prevent shiny from overwriting our error message
 #not used right now, using safeError below instead
@@ -102,6 +103,7 @@ get_data <- function()
   #################################
   # pull data from USAFacts and process
   #################################
+  #pull case data
   usafct_case_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_confirmed_usafacts.csv")
   state_df = usafct_case_data %>% distinct(stateFIPS, .keep_all = TRUE) %>% select(3:4)
   usafct_case_clean <- usafct_case_data %>% 
@@ -120,6 +122,22 @@ get_data <- function()
   #Remove duplicates
   usafct_case_clean <- usafct_case_clean %>% distinct(Location, Date, .keep_all = TRUE)
   
+  #County data cleaning-cases
+  county_usafct_case <- usafct_case_data %>% select(-c(countyFIPS, stateFIPS)) %>%
+    rename(state_abr = State, county_name = `County Name`)
+  county_usafct_case <- county_usafct_case[!(county_usafct_case$county_name == "Statewide Unallocated"), ]
+  county_usafct_case <- merge(county_usafct_case, us_popsize) %>%
+    select(-c(state_abr, total_pop))
+  county_usafct_case <- gather(county_usafct_case, Date, Total_Cases, -state, -county_name) %>%
+    group_by(state, county_name) %>% arrange(Date) %>%
+    mutate(Daily_Cases = c(0,diff(Total_Cases))) %>%
+    rename(Location = state)
+  #remove words to match county level population values
+  remove_words <- c(" County", " Borough", " Census Area", "Municipality of "," City and Borough", " County and City", " Parish", " Municipality")
+  county_usafct_case$county_name <- removeWords(county_usafct_case$county_name, remove_words)
+  county_usafct_case_clean <- merge(county_usafct_case, county_popsize)
+  
+  #pull death data
   usafct_death_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_deaths_usafacts.csv")
   state_df = usafct_death_data %>% distinct(stateFIPS, .keep_all = TRUE) %>% select(3:4)
   usafct_death_clean <- usafct_death_data %>% 
@@ -141,6 +159,27 @@ get_data <- function()
   usafct_clean <- left_join(usafct_case_clean, usafct_death_clean) %>%
     group_by(Location) %>% arrange(Date)  %>%
     ungroup()
+  
+  #County data cleaning-deaths
+  county_usafct_death <- usafct_death_data %>% select(-c(countyFIPS, stateFIPS)) %>%
+    rename(state_abr = State, county_name = `County Name`)
+  county_usafct_death <- county_usafct_death[!(county_usafct_death$county_name == "Statewide Unallocated"), ]
+  county_usafct_death <- merge(county_usafct_death, us_popsize) %>%
+    select(-c(state_abr, total_pop))
+  county_usafct_death <- gather(county_usafct_death, Date, Total_Deaths, -state, -county_name) %>%
+    group_by(state, county_name) %>% arrange(Date) %>%
+    mutate(Daily_Deaths = c(0,diff(Total_Deaths))) %>%
+    rename(Location = state)
+  #remove words to match county level population values
+  county_usafct_death$county_name <- removeWords(county_usafct_death$county_name, remove_words)
+  county_usafct_death_clean <- merge(county_usafct_death, county_popsize)
+  #combine county data
+  county_usafct_clean <- merge(county_usafct_case_clean, county_usafct_death_clean) %>%
+    rename(Population_Size = population_size) %>%
+    mutate(Date = as.Date(as.character(Date),format="%m/%d/%y"))
+  
+  #reformat county to long
+  county_usafct_clean <- gather(county_usafct_clean, variable, value, -county_name, -Location, -Date, -Population_Size)
   
   #add all US by summing over all variables
   all_us <- usafct_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
@@ -192,7 +231,7 @@ get_data <- function()
   us_jhu_clean <- county_jhu_clean %>% select(-FIPS, -county_name)  
   #modify county pops
   county_jhu_clean <- merge(county_jhu_clean, county_popsize) %>%
-    select(-Population_Size) %>%
+    select(-c(Population_Size, FIPS)) %>%
     rename(Population_Size = population_size)
   
   #################################
@@ -272,20 +311,18 @@ get_data <- function()
   world_dat <- world_dat[c("source","location","populationsize","date","variable","value")]
   
   # give each county dataset a source label
-  county_source_var = c("JHU")
+  county_source_var = c("JHU", "USAFacts")
   
   county_jhu_clean$source = county_source_var[1]
+  county_usafct_clean$source = county_source_var[2]
   
-  #combine all US data from different sources
+  #combine all county data from different sources
   #also do all variable/column names in lowercase
-  county_dat <- county_jhu_clean %>%
-    rename(date = Date, location = county_name, populationsize = Population_Size, fips = FIPS, state = Location)
+  county_dat <- dplyr::bind_rows(county_jhu_clean, county_usafct_clean) %>%
+                rename(date = Date, location = county_name, populationsize = Population_Size, state = Location)
   
   #reorder columns
-  county_dat <- county_dat[c("source","location","state", "fips", "populationsize","date","variable","value")]
-  
-  # combine all county data from different sources
-  # in progress
+  county_dat <- county_dat[c("source","location","state", "populationsize","date","variable","value")]
   
   #combine data in list  
   all_data$us_dat = us_dat
