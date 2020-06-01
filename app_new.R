@@ -229,12 +229,12 @@ get_data <- function()
   #reformat to long
   county_jhu_clean <- gather(us_jhu_clean, variable, value, -Location, -Population_Size, -Date, -FIPS, -county_name) 
   us_jhu_clean <- county_jhu_clean %>% select(-FIPS, -county_name)  
+  #remove duplicates for state data
+  us_jhu_clean <- us_jhu_clean %>% distinct(Location, Date, variable, .keep_all = TRUE)
   #modify county pops
   county_jhu_clean <- merge(county_jhu_clean, county_popsize) %>%
     select(-c(Population_Size, FIPS)) %>%
     rename(Population_Size = population_size)
-  
-  browser()
   
   
   #################################
