@@ -134,7 +134,7 @@ get_data <- function()
     rename(Location = state)
   #remove words to match county level population values
   remove_words <- c(" County", " Borough", " Census Area", "Municipality of "," City and Borough", " County and City", " Parish", " Municipality")
-  county_usafct_case$county_name <- removeWords(county_usafct_case$county_name, remove_words)
+  county_usafct_case$county_name <- tm::removeWords(county_usafct_case$county_name, remove_words)
   county_usafct_case_clean <- merge(county_usafct_case, county_popsize)
   
   #pull death data
@@ -171,7 +171,7 @@ get_data <- function()
     mutate(Daily_Deaths = c(0,diff(Total_Deaths))) %>%
     rename(Location = state)
   #remove words to match county level population values
-  county_usafct_death$county_name <- removeWords(county_usafct_death$county_name, remove_words)
+  county_usafct_death$county_name <- tm::removeWords(county_usafct_death$county_name, remove_words)
   county_usafct_death_clean <- merge(county_usafct_death, county_popsize)
   #combine county data
   county_usafct_clean <- merge(county_usafct_case_clean, county_usafct_death_clean) %>%
@@ -233,6 +233,9 @@ get_data <- function()
   county_jhu_clean <- merge(county_jhu_clean, county_popsize) %>%
     select(-c(Population_Size, FIPS)) %>%
     rename(Population_Size = population_size)
+  
+  browser()
+  
   
   #################################
   # pull world data from JHU github and process
@@ -370,7 +373,7 @@ ui <- fluidPage(
   includeCSS(here("www","appstyle.css")),
   #main tabs
   navbarPage( title = "COVID-19 Tracker", id = 'current_tab', selected = "us", header = "",
-              tabPanel(title = "US", value = "us",
+              tabPanel(title = "US States", value = "us",
                        sidebarLayout(
                          sidebarPanel(
                            shinyWidgets::pickerInput("state_selector", "Select State(s)", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("Georgia","California","Washington") ),
@@ -411,11 +414,50 @@ ui <- fluidPage(
                        ) #end sidebar layout     
               ), #close US tab
               
+           
+              tabPanel( title = "US Counties", value = "county",
+                        sidebarLayout(
+                          sidebarPanel(
+                            #County selector in progress...
+                            shinyWidgets::pickerInput("state_selector_c", "Select state", state_var,  multiple = FALSE, options = list(`actions-box` = TRUE), selected = c("Georgia")),
+                            shinyWidgets::pickerInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("Clarke")),
+                            shinyWidgets::pickerInput("source_selector_c", "Select Source(s)", county_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") ),
+                            shiny::div("Choose data sources (see 'About' tab for details)."),
+                            br(),
+                            shiny::selectInput( "case_death_c", "Outcome", c("Cases" = "Cases", "Deaths" = "Deaths")),
+                            shiny::div("Modify the plot to display cases or deaths."),
+                            br(),
+                            shiny::selectInput("daily_tot_c", "Daily or cumulative numbers", c("Daily" = "Daily", "Total" = "Total")),
+                            shiny::div("Modify the plot to reflect daily or cumulative data."),
+                            br(),
+                            shiny::selectInput("show_smoother_c", "Add trend line", c("No" = "No", "Yes" = "Yes")),
+                            shiny::div("Shows a trend line for cases/hospitalizations/deaths plot."),
+                            br(),
+                            shiny::selectInput("absolute_scaled_c", "Absolute or scaled values", c("Absolute Number" = "actual", "Per 100,000 persons" = "scaled") ),
+                            shiny::div("Modify the plot to display total counts or values scaled by the country population size."),
+                            br(),
+                            shiny::selectInput("xscale_c", "Set x-axis to calendar date or days since a specified total number of cases/deaths", c("Calendar Date" = "x_time", "Days since N cases/hospitalizations/deaths" = "x_count")),
+                            sliderInput(inputId = "x_limit_c", "Select a date or outcome value from which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") ),
+                            shiny::div("Modify all three plots to begin at a specified starting date or outcome value designated in the slider above."),
+                            br(),
+                            shiny::selectInput(  "yscale_c", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
+                            shiny::div("Modify the plot to show data on a linear or logarithmic scale."),
+                            br()
+                          ), #end sidebar panel
+                          
+                          mainPanel(
+                            #change to plotOutput if using static ggplot object
+                            plotlyOutput(outputId = "county_case_death_plot", height = "300px")
+                          ) #end main panel
+                          
+                        ), #close sidebar layout
+              ), #close county tab
+              
               tabPanel( title = "World", value = "world",
                         sidebarLayout(
                           sidebarPanel(
                             #Country selector coding with US, Italy, and Spain as always selected for a defult setting, will flash an error with none selected
-                            shinyWidgets::pickerInput("country_selector", "Select counties", country_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("US", "United Kingdom", "Germany")),
+                            shinyWidgets::pickerInput("country_selector", "Select countries", country_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("US", "United Kingdom", "Germany")),
                             shinyWidgets::pickerInput("source_selector_w", "Select Source(s)", world_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") ),
                             shiny::div("Choose data sources (see 'About' tab for details)."),
                             br(),
@@ -451,44 +493,6 @@ ui <- fluidPage(
                           
                         ), #close sidebar layout
               ), #close world tab
-              
-              tabPanel( title = "County", value = "county",
-                        sidebarLayout(
-                          sidebarPanel(
-                            #County selector in progress...
-                            shinyWidgets::pickerInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("NULL")),
-                            shinyWidgets::pickerInput("state_selector_c", "Select states", state_var,  multiple = FALSE, options = list(`actions-box` = TRUE), selected = c("Georgia")),
-                            shinyWidgets::pickerInput("source_selector_c", "Select Source(s)", county_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") ),
-                            shiny::div("Choose data sources (see 'About' tab for details)."),
-                            br(),
-                            shiny::selectInput( "case_death_c", "Outcome", c("Cases" = "Cases", "Deaths" = "Deaths")),
-                            shiny::div("Modify the plot to display cases or deaths."),
-                            br(),
-                            shiny::selectInput("daily_tot_c", "Daily or cumulative numbers", c("Daily" = "Daily", "Total" = "Total")),
-                            shiny::div("Modify the plot to reflect daily or cumulative data."),
-                            br(),
-                            shiny::selectInput("show_smoother_c", "Add trend line", c("No" = "No", "Yes" = "Yes")),
-                            shiny::div("Shows a trend line for cases/hospitalizations/deaths plot."),
-                            br(),
-                            shiny::selectInput("absolute_scaled_c", "Absolute or scaled values", c("Absolute Number" = "actual", "Per 100,000 persons" = "scaled") ),
-                            shiny::div("Modify the plot to display total counts or values scaled by the country population size."),
-                            br(),
-                            shiny::selectInput("xscale_c", "Set x-axis to calendar date or days since a specified total number of cases/deaths", c("Calendar Date" = "x_time", "Days since N cases/hospitalizations/deaths" = "x_count")),
-                            sliderInput(inputId = "x_limit_c", "Select a date or outcome value from which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") ),
-                            shiny::div("Modify all three plots to begin at a specified starting date or outcome value designated in the slider above."),
-                            br(),
-                            shiny::selectInput(  "yscale_c", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
-                            shiny::div("Modify the plot to show data on a linear or logarithmic scale."),
-                            br()
-                          ), #end sidebar panel
-                          
-                          mainPanel(
-                            #change to plotOutput if using static ggplot object
-                            plotlyOutput(outputId = "county_case_death_plot", height = "300px")
-                          ) #end main panel
-                          
-                        ), #close sidebar layout
-              ), #close county tab
               
               tabPanel( title = "About", value = "about",
                         tagList(    
