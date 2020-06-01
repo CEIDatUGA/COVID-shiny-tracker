@@ -129,6 +129,7 @@ get_data <- function()
   county_usafct_case <- merge(county_usafct_case, us_popsize) %>%
     select(-c(state_abr, total_pop))
   county_usafct_case <- gather(county_usafct_case, Date, Total_Cases, -state, -county_name) %>%
+    mutate(Date = as.Date(Date,format="%m/%d/%y")) %>%
     group_by(state, county_name) %>% arrange(Date) %>%
     mutate(Daily_Cases = c(0,diff(Total_Cases))) %>%
     rename(Location = state)
@@ -167,6 +168,7 @@ get_data <- function()
   county_usafct_death <- merge(county_usafct_death, us_popsize) %>%
     select(-c(state_abr, total_pop))
   county_usafct_death <- gather(county_usafct_death, Date, Total_Deaths, -state, -county_name) %>%
+    mutate(Date = as.Date(Date,format="%m/%d/%y")) %>%
     group_by(state, county_name) %>% arrange(Date) %>%
     mutate(Daily_Deaths = c(0,diff(Total_Deaths))) %>%
     rename(Location = state)
@@ -175,8 +177,7 @@ get_data <- function()
   county_usafct_death_clean <- merge(county_usafct_death, county_popsize)
   #combine county data
   county_usafct_clean <- merge(county_usafct_case_clean, county_usafct_death_clean) %>%
-    rename(Population_Size = population_size) %>%
-    mutate(Date = as.Date(as.character(Date),format="%m/%d/%y"))
+    rename(Population_Size = population_size)
   
   #reformat county to long
   county_usafct_clean <- gather(county_usafct_clean, variable, value, -county_name, -Location, -Date, -Population_Size)
@@ -418,7 +419,7 @@ ui <- fluidPage(
               tabPanel( title = "US Counties", value = "county",
                         sidebarLayout(
                           sidebarPanel(
-                            #County selector in progress...
+                            #County selector 
                             shinyWidgets::pickerInput("state_selector_c", "Select state", state_var,  multiple = FALSE, options = list(`actions-box` = TRUE), selected = c("Georgia")),
                             shinyWidgets::pickerInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("Clarke")),
                             shinyWidgets::pickerInput("source_selector_c", "Select Source(s)", county_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") ),
@@ -630,7 +631,7 @@ server <- function(input, output, session) {
                   #redesignate county_dat to match the state selector input
                    county_dat_sub <- county_dat %>% filter(state %in% input$state_selector_c)
                    county_var_sub = sort(unique(county_dat_sub$location))
-                   shinyWidgets::updatePickerInput(session, "county_selector", "Select counties", county_var_sub, selected = c("NULL"))
+                   shinyWidgets::updatePickerInput(session, "county_selector", "Select counties", county_var_sub, selected = c("Clarke"))
              })
   
 
