@@ -435,7 +435,7 @@ ui <- fluidPage(
                             shiny::div("Shows a trend line for cases/hospitalizations/deaths plot."),
                             br(),
                             shiny::selectInput("absolute_scaled_c", "Absolute or scaled values", c("Absolute Number" = "actual", "Per 100,000 persons" = "scaled") ),
-                            shiny::div("Modify the plot to display total counts or values scaled by the country population size."),
+                            shiny::div("Modify the plot to display total counts or values scaled by the county population size."),
                             br(),
                             shiny::selectInput("xscale_c", "Set x-axis to calendar date or days since a specified total number of cases/deaths", c("Calendar Date" = "x_time", "Days since N cases/hospitalizations/deaths" = "x_count")),
                             sliderInput(inputId = "x_limit_c", "Select a date or outcome value from which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") ),
@@ -661,7 +661,7 @@ server <- function(input, output, session) {
     {
       #add an additional line of filtering when using the county tab to prevent double stacking of data from counties that share the same name in multiple states
       #sort remaining data as done for us and world plots
-      plot_dat <- all_plot_dat %>% filter(state %in% input$state_selector_c) %>%
+      plot_dat <- county_dat %>% filter(state %in% input$state_selector_c) %>%
                                    filter(location %in% location_selector) %>%      
                                    filter(source %in% source_selector) %>%
                                    group_by(source,location) %>%
