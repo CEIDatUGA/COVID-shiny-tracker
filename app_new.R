@@ -213,7 +213,7 @@ get_data <- function()
   us_jhu_popsize <- us_popsize %>% rename(Location = state)
   # This merge removes cruise ship cases/death counts
   us_jhu_merge <- merge(us_jhu_combined, us_jhu_popsize)
-  us_jhu_clean <- us_jhu_merge %>% mutate(Date = as.Date(as.character(Date),format="%m/%d/%y")) %>%
+  us_jhu_total <- us_jhu_merge %>% mutate(Date = as.Date(as.character(Date),format="%m/%d/%y")) %>%
     group_by(Location, Admin2) %>% arrange(Date) %>%
     mutate(Daily_Cases = c(0,diff(Cases))) %>%
     mutate(Daily_Deaths = c(0,diff(Deaths))) %>% 
@@ -222,20 +222,24 @@ get_data <- function()
     select(-state_abr) 
   
   #add all US by summing over all variables
-  all_us <- us_jhu_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE) %>%
+  all_us <- us_jhu_total %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE) %>%
     mutate(county_name = "NA")
   all_us$Location = "US"
   all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
-  us_jhu_clean = rbind(us_jhu_clean,all_us)
-  #reformat to long
-  county_jhu_clean <- gather(us_jhu_clean, variable, value, -Location, -Population_Size, -Date, -FIPS, -county_name) 
-  us_jhu_clean <- county_jhu_clean %>% select(-FIPS, -county_name)  
-  #remove duplicates for state data
-  us_jhu_clean <- us_jhu_clean %>% distinct(Location, Date, variable, .keep_all = TRUE)
-  #modify county pops
+  us_jhu_total = rbind(us_jhu_total,all_us)
+  
+  #Pull county data and reformat to long
+  county_jhu_clean <- gather(us_jhu_total, variable, value, -Location, -Population_Size, -Date, -FIPS, -county_name) 
+  #add county population numbers 
   county_jhu_clean <- merge(county_jhu_clean, county_popsize) %>%
     select(-c(Population_Size, FIPS)) %>%
     rename(Population_Size = population_size)
+  
+  #finalize state data
+  us_jhu_clean <- us_jhu_total %>% select(-FIPS, -county_name)
+  us_jhu_clean <- aggregate(. ~ Location + Date + Population_Size, us_jhu_clean, FUN = sum)
+  #reformat state data to long
+  us_jhu_clean <- gather(us_jhu_clean, variable, value, -Location, -Population_Size, -Date)
   
   
   #################################
