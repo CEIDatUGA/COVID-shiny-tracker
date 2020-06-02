@@ -421,7 +421,7 @@ ui <- fluidPage(
                           sidebarPanel(
                             #County selector 
                             shinyWidgets::pickerInput("state_selector_c", "Select state", state_var,  multiple = FALSE, options = list(`actions-box` = TRUE), selected = c("Georgia")),
-                            shinyWidgets::pickerInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("Clarke")),
+                            shinyWidgets::pickerInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = county_var[1]),
                             shinyWidgets::pickerInput("source_selector_c", "Select Source(s)", county_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") ),
                             shiny::div("Choose data sources (see 'About' tab for details)."),
                             br(),
@@ -448,7 +448,7 @@ ui <- fluidPage(
                           
                           mainPanel(
                             #change to plotOutput if using static ggplot object
-                            plotlyOutput(outputId = "county_case_death_plot", height = "300px")
+                            plotlyOutput(outputId = "county_case_death_plot", height = "500px")
                           ) #end main panel
                           
                         ), #close sidebar layout
@@ -520,7 +520,7 @@ ui <- fluidPage(
                             ),# and tag
                             tags$div(
                               id = "bigtext",
-                              "We currently include 4 different data sources for the US.", 
+                              "We currently include 4 different data sources for US states.", 
                               a("The Covid Tracking Project",  href = "https://covidtracking.com/", target = "_blank" ),
                               "data source reports all and positive tests, hospitalizations (some states) and deaths. We interpret positive tests as corresponding to new cases. The",
                               a("New York Times (NYT),", href = "https://github.com/nytimes/covid-19-data", target = "_blank" ),
@@ -528,6 +528,10 @@ ui <- fluidPage(
                               "and",
                               a("Johns Hopkins University Center for Systems Science and Engineering (JHU)", href = "https://github.com/CSSEGISandData/COVID-19", target = "_blank" ),
                               "sources report cases and deaths."
+                              ), 
+                            tags$div(
+                              id = "bigtext",
+                              "Two of these sources, JHU and USA Facts, also provide data on the county level, those are included in the county tab."         
                               ), 
                             tags$div(
                               id = "bigtext",
@@ -631,7 +635,7 @@ server <- function(input, output, session) {
                   #redesignate county_dat to match the state selector input
                    county_dat_sub <- county_dat %>% filter(state %in% input$state_selector_c)
                    county_var_sub = sort(unique(county_dat_sub$location))
-                   shinyWidgets::updatePickerInput(session, "county_selector", "Select counties", county_var_sub, selected = c("Clarke"))
+                   shinyWidgets::updatePickerInput(session, "county_selector", "Select counties", county_var_sub, selected = county_var_sub[1])
              })
   
 
