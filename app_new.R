@@ -80,7 +80,7 @@ get_data <- function()
   
   
   #################################
-  # pull data from NYT and process
+  # pull country data from NYT and process
   #################################
   us_nyt_data <- readr::read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv")
   us_nyt_clean <- us_nyt_data %>% dplyr::select(c(date,state,cases,deaths)) %>%
@@ -88,8 +88,7 @@ get_data <- function()
     mutate(Daily_Cases = c(0,diff(cases))) %>% 
     mutate(Daily_Deaths = c(0,diff(deaths))) %>%
     merge(us_popsize) %>%
-    rename(Date = date, Location = state, Population_Size = total_pop, Total_Deaths = deaths, 
-           Total_Cases = cases)  %>%
+    rename(Date = date, Location = state, Population_Size = total_pop, Total_Deaths = deaths, Total_Cases = cases)  %>%
     select(-state_abr)
   
   #add all US by summing over all variables
@@ -99,6 +98,24 @@ get_data <- function()
   us_nyt_clean = rbind(us_nyt_clean,all_us)
   #reformat to long
   us_nyt_clean <- gather(us_nyt_clean, variable, value, -Location, -Population_Size, -Date)
+  
+  #################################
+  # pull county data from NYT and process
+  #################################
+  county_nyt <- readr::read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+  county_nyt <- county_nyt %>% 
+    rename(Location = state, county_name = county, Date = date, Total_Cases = cases, Total_Deaths = deaths) %>%
+    select(-fips) %>%
+    group_by(Location, county_name) %>% arrange(Date) %>%
+    mutate(Daily_Cases = c(0,diff(Total_Cases))) %>%
+    mutate(Daily_Deaths = c(0,diff(Total_Deaths)))
+  #standardize county names
+  extract_words <- c(" city", " Borough", " City", " City and Borough", " Census Area")
+  county_nyt$county_name <- tm::removeWords(county_nyt$county_name, extract_words)
+  county_nyt <- merge(county_nyt, county_popsize) %>%
+    rename(Population_Size = population_size)
+  #reformat to long
+  county_nyt_clean <- gather(county_nyt, variable, value, -Location, -Population_Size, -Date, -county_name)
 
   #################################
   # pull data from USAFacts and process
@@ -319,18 +336,25 @@ get_data <- function()
   world_dat <- world_dat[c("source","location","populationsize","date","variable","value")]
   
   # give each county dataset a source label
-  county_source_var = c("JHU", "USAFacts")
+  county_source_var = c("JHU", "USAFacts", "NYTimes")
   
   county_jhu_clean$source = county_source_var[1]
   county_usafct_clean$source = county_source_var[2]
+  county_nyt_clean$source = county_source_var[3]
   
   #combine all county data from different sources
   #also do all variable/column names in lowercase
-  county_dat <- dplyr::bind_rows(county_jhu_clean, county_usafct_clean) %>%
+  county_dat <- dplyr::bind_rows(county_jhu_clean, county_usafct_clean, county_nyt_clean) %>%
                 rename(date = Date, location = county_name, populationsize = Population_Size, state = Location)
   
   #reorder columns
   county_dat <- county_dat[c("source","location","state", "populationsize","date","variable","value")]
+  
+  #Sanatize negative values to zero
+  #Comment out the line below to keep negative values in the data for debugging
+  ############################################
+  county_dat$value[county_dat$value <0] <- 0
+  ############################################
   
   #combine data in list  
   all_data$us_dat = us_dat
@@ -365,6 +389,7 @@ state_var = sort(unique(us_dat$location))
 state_var = c("US",state_var[!state_var=="US"]) #move US to front
 country_var = sort(unique(world_dat$location))
 county_var = sort(unique(county_dat$location))
+state_var_county = sort(unique(county_dat$state))
 
 us_source_var = unique(us_dat$source)
 world_source_var = unique(world_dat$source)
@@ -424,7 +449,7 @@ ui <- fluidPage(
                         sidebarLayout(
                           sidebarPanel(
                             #County selector 
-                            shinyWidgets::pickerInput("state_selector_c", "Select state", state_var,  multiple = FALSE, options = list(`actions-box` = TRUE), selected = c("Georgia")),
+                            shinyWidgets::pickerInput("state_selector_c", "Select state", state_var_county,  multiple = FALSE, options = list(`actions-box` = TRUE), selected = c("Georgia")),
                             shinyWidgets::pickerInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = county_var[1]),
                             shinyWidgets::pickerInput("source_selector_c", "Select Source(s)", county_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") ),
                             shiny::div("Choose data sources (see 'About' tab for details)."),
