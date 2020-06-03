@@ -39,17 +39,19 @@ get_data <- function()
   all_data = list() #will save and return all datasets as list
   
   #################################
-  # pull data from Covidtracking and process
+  # pull state level and testing data from Covidtracking and process
   #################################
   us_ct_data <- read_csv("https://covidtracking.com/api/v1/states/daily.csv")
   us_ct_clean <- us_ct_data %>% dplyr::select(c(date,state,positive,negative,total,hospitalized,death)) %>%
     mutate(date = as.Date(as.character(date),format="%Y%m%d")) %>% 
-    group_by(state) %>% arrange(date) %>%
+    group_by(state) %>% 
+    arrange(date) %>%
     mutate(Daily_Test_Positive = c(0,diff(positive))) %>% 
     mutate(Daily_Test_Negative = c(0,diff(negative))) %>% 
     mutate(Daily_Test_All = c(0,diff(total))) %>% 
     mutate(Daily_Hospitalized = c(0,diff(hospitalized))) %>% 
-    mutate(Daily_Deaths = c(0,diff(death))) %>% rename(state_abr = state) %>%
+    mutate(Daily_Deaths = c(0,diff(death))) %>% 
+    rename(state_abr = state) %>%
     merge(us_popsize) %>%
     rename(Date = date, Location = state, Population_Size = total_pop, Total_Deaths = death, 
            Total_Cases = positive, Total_Hospitalized = hospitalized, 
@@ -68,23 +70,28 @@ get_data <- function()
                             mutate(Daily_Positive_Prop = Daily_Test_Positive / Daily_Test_All) %>%
                             mutate(Total_Positive_Prop = Total_Test_Positive / Total_Test_All) 
     
-  
+  #combine all US data with rest of data
   us_ct_clean = rbind(us_ct_clean,all_us)
   
   #reformat to long
   us_ct_clean <- gather(us_ct_clean, variable, value, -Location, -Population_Size, -Date)
-  #aggregate repedative date + location entries
-  us_ct_clean <- aggregate(value ~ variable + Date + Location + Population_Size, us_ct_clean, FUN = sum)
+  
+  #*************************************
+  #I don't understand why this aggregation is done here   
+  #Are there duplicate values? If yes, shouldn't we remove the duplicates instead of summing?
+  #*************************************
+  us_ct_clean <- aggregate(value ~ Date + Location + Population_Size + variable, us_ct_clean, FUN = sum)
   us_ct_clean$value[!is.finite(us_ct_clean$value)] <- NA
   us_ct_clean[!is.na(us_ct_clean$value), ]														
   
   
   #################################
-  # pull country data from NYT and process
+  # pull state level data from NYT and process
   #################################
   us_nyt_data <- readr::read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv")
   us_nyt_clean <- us_nyt_data %>% dplyr::select(c(date,state,cases,deaths)) %>%
-    group_by(state) %>% arrange(date) %>%
+    group_by(state) %>% 
+    arrange(date) %>%
     mutate(Daily_Cases = c(0,diff(cases))) %>% 
     mutate(Daily_Deaths = c(0,diff(deaths))) %>%
     merge(us_popsize) %>%
@@ -92,9 +99,12 @@ get_data <- function()
     select(-state_abr)
   
   #add all US by summing over all variables
-  all_us <- us_nyt_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
-  all_us$Location = "US"
-  all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
+  all_us <- us_nyt_clean %>% 
+            group_by(Date) %>% 
+            summarize_if(is.numeric, sum, na.rm=TRUE) %>%
+            mutate(Location = "US") %>%
+            mutate(Population_Size = max(Population_Size))
+  
   us_nyt_clean = rbind(us_nyt_clean,all_us)
   #reformat to long
   us_nyt_clean <- gather(us_nyt_clean, variable, value, -Location, -Population_Size, -Date)
@@ -102,13 +112,14 @@ get_data <- function()
   #################################
   # pull county data from NYT and process
   #################################
-  county_nyt <- readr::read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
-  county_nyt <- county_nyt %>% 
-    rename(Location = state, county_name = county, Date = date, Total_Cases = cases, Total_Deaths = deaths) %>%
-    select(-fips) %>%
-    group_by(Location, county_name) %>% arrange(Date) %>%
-    mutate(Daily_Cases = c(0,diff(Total_Cases))) %>%
-    mutate(Daily_Deaths = c(0,diff(Total_Deaths)))
+  county_nyt_data <- readr::read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+  county_nyt <- county_nyt_data %>% 
+                      rename(Location = state, county_name = county, Date = date, Total_Cases = cases, Total_Deaths = deaths) %>%
+                      select(-fips) %>%
+                      group_by(Location, county_name) %>% 
+                      arrange(Date) %>%
+                      mutate(Daily_Cases = c(0,diff(Total_Cases))) %>%
+                      mutate(Daily_Deaths = c(0,diff(Total_Deaths)))
   #standardize county names
   extract_words <- c(" city", " Borough", " City", " City and Borough", " Census Area")
   county_nyt$county_name <- tm::removeWords(county_nyt$county_name, extract_words)
@@ -120,89 +131,101 @@ get_data <- function()
   #################################
   # pull data from USAFacts and process
   #################################
-  #pull case data
+  #pull data
   usafct_case_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_confirmed_usafacts.csv")
-  state_df = usafct_case_data %>% distinct(stateFIPS, .keep_all = TRUE) %>% select(3:4)
+  usafct_death_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_deaths_usafacts.csv")
+  
+  state_df = usafct_case_data %>% 
+             distinct(stateFIPS, .keep_all = TRUE) %>% 
+             select(State,stateFIPS)
+
   usafct_case_clean <- usafct_case_data %>% 
-    dplyr::group_by(stateFIPS) %>% 
-    summarize_if(is.numeric, sum, na.rm=TRUE) %>%
-    dplyr::select(-countyFIPS) %>% 
-    left_join(state_df) %>%    
-    tidyr::pivot_longer(-State, names_to = "Date", values_to = "Total_Cases") %>%
-    mutate(Date = as.Date(Date,format="%m/%d/%y")) %>% 
-    group_by(State) %>% arrange(Date) %>%
-    mutate(Daily_Cases = c(0,diff(Total_Cases))) %>% 
-    rename(state_abr = State) %>%
-    merge(us_popsize) %>%
-    rename(Location = state, Population_Size = total_pop) %>%
-    select(-c(state_abr))
-  #Remove duplicates
-  usafct_case_clean <- usafct_case_clean %>% distinct(Location, Date, .keep_all = TRUE)
+                      dplyr::group_by(stateFIPS) %>% 
+                      summarize_if(is.numeric, sum, na.rm=TRUE) %>%
+                      dplyr::select(-countyFIPS) %>% 
+                      left_join(state_df) %>%    
+                      tidyr::pivot_longer(-State, names_to = "Date", values_to = "Total_Cases") %>%
+                      mutate(Date = as.Date(Date,format="%m/%d/%y")) %>% 
+                      group_by(State) %>% arrange(Date) %>%
+                      mutate(Daily_Cases = c(0,diff(Total_Cases))) %>% 
+                      rename(state_abr = State) %>%
+                      merge(us_popsize) %>%
+                      rename(Location = state, Population_Size = total_pop) %>%
+                      select(-c(state_abr))
+  
+  usafct_death_clean <- usafct_death_data %>% 
+                        dplyr::group_by(stateFIPS) %>% 
+                        summarize_if(is.numeric, sum, na.rm=TRUE) %>%
+                        dplyr::select(-countyFIPS) %>% 
+                        left_join(state_df) %>%    
+                        tidyr::pivot_longer(-State, names_to = "Date", values_to = "Total_Deaths") %>%
+                        mutate(Date = as.Date(Date,format="%m/%d/%y")) %>% 
+                        group_by(State) %>% arrange(Date) %>%
+                        mutate(Daily_Deaths = c(0,diff(Total_Deaths))) %>% 
+                        rename(state_abr = State) %>%
+                        merge(us_popsize) %>%
+                        rename(Location = state, Population_Size = total_pop) %>%
+                        select(-c(state_abr))
+                      
+  usafct_clean <- left_join(usafct_case_clean, usafct_death_clean) %>%
+                  group_by(Location) %>% 
+                  arrange(Date)  %>%
+                  ungroup()
+                
+  
+  #*************************************
+  #Why is us_popsize merged with the data frame below and not county_popsize?
+  #same for deaths below
+  #*************************************
   
   #County data cleaning-cases
-  county_usafct_case <- usafct_case_data %>% select(-c(countyFIPS, stateFIPS)) %>%
-    rename(state_abr = State, county_name = `County Name`)
-  county_usafct_case <- county_usafct_case[!(county_usafct_case$county_name == "Statewide Unallocated"), ]
-  county_usafct_case <- merge(county_usafct_case, us_popsize) %>%
-    select(-c(state_abr, total_pop))
-  county_usafct_case <- gather(county_usafct_case, Date, Total_Cases, -state, -county_name) %>%
-    mutate(Date = as.Date(Date,format="%m/%d/%y")) %>%
-    group_by(state, county_name) %>% arrange(Date) %>%
-    mutate(Daily_Cases = c(0,diff(Total_Cases))) %>%
-    rename(Location = state)
+  county_usafct_case <- usafct_case_data %>% 
+                        select(-c(countyFIPS, stateFIPS)) %>%
+                        rename(state_abr = State, county_name = `County Name`) %>%
+                        dplyr::filter(county_name != "Statewide Unallocated") %>%
+                        left_join(us_popsize) %>%
+                        select(-c(state_abr, total_pop)) %>%
+                        gather(Date, Total_Cases, -state, -county_name) %>%
+                        mutate(Date = as.Date(Date,format="%m/%d/%y")) %>%
+                        group_by(state, county_name) %>% arrange(Date) %>%
+                        mutate(Daily_Cases = c(0,diff(Total_Cases))) %>%
+                        rename(Location = state)
   #remove words to match county level population values
   remove_words <- c(" County", " Borough", " Census Area", "Municipality of "," City and Borough", " County and City", " Parish", " Municipality")
   county_usafct_case$county_name <- tm::removeWords(county_usafct_case$county_name, remove_words)
   county_usafct_case_clean <- merge(county_usafct_case, county_popsize)
   
-  #pull death data
-  usafct_death_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_deaths_usafacts.csv")
-  state_df = usafct_death_data %>% distinct(stateFIPS, .keep_all = TRUE) %>% select(3:4)
-  usafct_death_clean <- usafct_death_data %>% 
-    dplyr::group_by(stateFIPS) %>% 
-    summarize_if(is.numeric, sum, na.rm=TRUE) %>%
-    dplyr::select(-countyFIPS) %>% 
-    left_join(state_df) %>%    
-    tidyr::pivot_longer(-State, names_to = "Date", values_to = "Total_Deaths") %>%
-    mutate(Date = as.Date(Date,format="%m/%d/%y")) %>% 
-    group_by(State) %>% arrange(Date) %>%
-    mutate(Daily_Deaths = c(0,diff(Total_Deaths))) %>% 
-    rename(state_abr = State) %>%
-    merge(us_popsize) %>%
-    rename(Location = state, Population_Size = total_pop) %>%
-    select(-state_abr, -Population_Size)
-  #Remove duplicates
-  usafct_death_clean <- usafct_death_clean %>% distinct(Location, Date, .keep_all = TRUE)
-  
-  usafct_clean <- left_join(usafct_case_clean, usafct_death_clean) %>%
-    group_by(Location) %>% arrange(Date)  %>%
-    ungroup()
   
   #County data cleaning-deaths
-  county_usafct_death <- usafct_death_data %>% select(-c(countyFIPS, stateFIPS)) %>%
-    rename(state_abr = State, county_name = `County Name`)
-  county_usafct_death <- county_usafct_death[!(county_usafct_death$county_name == "Statewide Unallocated"), ]
-  county_usafct_death <- merge(county_usafct_death, us_popsize) %>%
-    select(-c(state_abr, total_pop))
-  county_usafct_death <- gather(county_usafct_death, Date, Total_Deaths, -state, -county_name) %>%
-    mutate(Date = as.Date(Date,format="%m/%d/%y")) %>%
-    group_by(state, county_name) %>% arrange(Date) %>%
-    mutate(Daily_Deaths = c(0,diff(Total_Deaths))) %>%
-    rename(Location = state)
+  county_usafct_death <- usafct_death_data %>% 
+                         select(-c(countyFIPS, stateFIPS)) %>%
+                         rename(state_abr = State, county_name = `County Name`) %>%
+                         dplyr::filter(county_name != "Statewide Unallocated") %>%
+                         left_join(us_popsize) %>%
+                         select(-c(state_abr, total_pop)) %>%
+                         gather(Date, Total_Deaths, -state, -county_name) %>%
+                          mutate(Date = as.Date(Date,format="%m/%d/%y")) %>%
+                          group_by(state, county_name) %>% arrange(Date) %>%
+                          mutate(Daily_Deaths = c(0,diff(Total_Deaths))) %>%
+                          rename(Location = state)
   #remove words to match county level population values
   county_usafct_death$county_name <- tm::removeWords(county_usafct_death$county_name, remove_words)
   county_usafct_death_clean <- merge(county_usafct_death, county_popsize)
+  
   #combine county data
   county_usafct_clean <- merge(county_usafct_case_clean, county_usafct_death_clean) %>%
-    rename(Population_Size = population_size)
+                         rename(Population_Size = population_size)
   
   #reformat county to long
   county_usafct_clean <- gather(county_usafct_clean, variable, value, -county_name, -Location, -Date, -Population_Size)
   
   #add all US by summing over all variables
-  all_us <- usafct_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
-  all_us$Location = "US"
-  all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
+  all_us <- usafct_clean %>% 
+            group_by(Date) %>% 
+            summarize_if(is.numeric, sum, na.rm=TRUE) %>%
+            mutate(Location = "US") %>%
+            mutate(Population_Size = max(Population_Size))
+  
   usafct_clean = rbind(usafct_clean,all_us)
   #reformat to long
   usafct_clean <- gather(usafct_clean, variable, value, -Location, -Population_Size, -Date)
@@ -214,9 +237,15 @@ get_data <- function()
   us_jhu_cases <- readr::read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv")
   us_jhu_deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv")
   # Clean cases
-  us_jhu_cases <- us_jhu_cases %>% filter(iso3 == "USA") %>%
-    dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -Combined_Key)) %>%
-    rename(Location = Province_State)
+  us_jhu_cases <- us_jhu_cases %>% 
+                  filter(iso3 == "USA") %>%
+                  dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -Combined_Key)) %>%
+                  rename(Location = Province_State)
+  
+  #*************************************
+  #What does the aggregate function below do, why is it needed?
+  #*************************************
+  
   us_jhu_cases <- aggregate(. ~ Location + FIPS + Admin2, us_jhu_cases, FUN = sum)
   us_jhu_cases_clean <- gather(us_jhu_cases, Date, Cases, -Location, -FIPS, -Admin2)
   # Clean deaths
@@ -466,9 +495,7 @@ ui <- fluidPage(
                             shiny::selectInput("absolute_scaled_c", "Absolute or scaled values", c("Absolute Number" = "actual", "Per 100,000 persons" = "scaled") ),
                             shiny::div("Modify the plot to display total counts or values scaled by the county population size."),
                             br(),
-                            shiny::selectInput("xscale_c", "Set x-axis to calendar date or days since a specified total number of cases/deaths", c("Calendar Date" = "x_time", "Days since N cases/hospitalizations/deaths" = "x_count")),
-                            sliderInput(inputId = "x_limit_c", "Select a date or outcome value from which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") ),
-                            shiny::div("Modify all three plots to begin at a specified starting date or outcome value designated in the slider above."),
+                            sliderInput(inputId = "x_limit_c", "Select a date at which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") ),
                             br(),
                             shiny::selectInput(  "yscale_c", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
                             shiny::div("Modify the plot to show data on a linear or logarithmic scale."),
@@ -560,7 +587,7 @@ ui <- fluidPage(
                               ), 
                             tags$div(
                               id = "bigtext",
-                              "Two of these sources, JHU and USA Facts, also provide data on the county level, those are included in the county tab."         
+                              "Three of these sources, JHU, NY Times and USA Facts, also provide data on the county level, those are included in the county tab."         
                               ), 
                             tags$div(
                               id = "bigtext",
@@ -916,8 +943,9 @@ server <- function(input, output, session) {
     pl <- NULL
     if (!is.null(input$source_selector_c))
     {
+      #this plot does not give the option to start at N cases/deaths, seems useless
       pl <- make_plotly(county_dat, input$county_selector, input$source_selector_c, input$case_death_c, input$daily_tot_c,
-                        input$xscale_c, input$yscale_c, input$absolute_scaled_c, input$x_limit_c, input$current_tab,
+                        "x_time", input$yscale_c, input$absolute_scaled_c, input$x_limit_c, input$current_tab,
                         input$show_smoother_c, ylabel = 1, outtype = '')
     }
     return(pl)
