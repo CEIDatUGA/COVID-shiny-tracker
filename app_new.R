@@ -15,6 +15,41 @@ library(tm)
 #not used right now, using safeError below instead
 #options(shiny.sanitize.errors = FALSE)
 
+#******************************
+#general: let's try to do as much using the tidyverse style/functions as possible
+#if possible get rid of merge() and replace with one of the join_ functions
+#also, gather() is outdated, if possible use pivot_longer
+#instead of rbind and cbind, bind_rows and bind_cols is better
+#*****************************
+
+
+#################################
+# make functions
+#################################
+
+#function to reformat datasets to long format following import cleaning
+to_long <- function(df){
+  long_format <- gather(df, variable, value, -Location, -Population_Size, -Date)
+  return(long_format)
+}
+
+#function to standardize county names from different datasets then merge with the county_popsize data
+clean_counties <- function(df,county_popsize){
+  extract_words <- c(" city", " City", " City and Borough", " Census Area"," County", " Borough",  "Municipality of ", " County and City", " Parish", " Municipality")
+  df$county_name <- tm::removeWords(df$county_name, extract_words)
+  county_complete <- merge(df, county_popsize) %>% rename(Population_Size = population_size)
+  return(county_complete)
+}
+
+#function to add all US to data
+add_US <- function(df){
+  df_new <- df %>% group_by(Date) %>% 
+                   summarize_if(is.numeric, sum, na.rm=TRUE) %>%
+                   mutate(Location = "US") %>%
+                   mutate(Population_Size = max(Population_Size))
+  return(df_new)
+}
+
 #################################
 # Load all data
 # should be online so things update automatically
@@ -31,6 +66,14 @@ get_data <- function()
   }
   #if data file is not here, go through all of the below
   
+  #*******************************
+  #let's get the popsize files standardized 
+  #rename the population size to pop_size in each file
+  #rename Location to state for county_popsize and add state_abr
+  #all variable names lower case
+  #might require a few lines of code adjustment in the cleaning code
+  #******************************
+  
   #data for population size for each state/country so we can compute cases per 100K
   us_popsize <- readRDS(here("data","us_popsize.rds")) %>% rename(state_abr = state, state = state_full)
   world_popsize <-readRDS(here("data","world_popsize.rds"))
@@ -38,24 +81,7 @@ get_data <- function()
   
   all_data = list() #will save and return all datasets as list
   
-  #################################
-  # make functions
-  #################################
-  
-  #function to reformat datasets to long format following import cleaning
-  to_long <- function(df){
-    long_format <- gather(df, variable, value, -Location, -Population_Size, -Date)
-    return(long_format)
-  }
-  
-  #function to standardize county names from different datasets then merge with the county_popsize data
-  clean_counties <- function(df){
-    extract_words <- c(" city", " City", " City and Borough", " Census Area"," County", " Borough",  "Municipality of ", " County and City", " Parish", " Municipality")
-    df$county_name <- tm::removeWords(df$county_name, extract_words)
-    county_complete <- merge(df, county_popsize) %>% rename(Population_Size = population_size)
-    return(county_complete)
-  }
-  
+   
   #################################
   # pull state level and testing data from Covidtracking and process
   #################################
@@ -81,12 +107,9 @@ get_data <- function()
   
   #add all US by summing over all variables
   #adding is not right approach for proportion test positive, so need to recompute
-  all_us <- us_ct_clean %>% group_by(Date) %>% 
-                            summarize_if(is.numeric, sum, na.rm=TRUE) %>%
-                            mutate(Location = "US") %>%
-                            mutate(Population_Size = max(Population_Size)) %>%
-                            mutate(Daily_Positive_Prop = Daily_Test_Positive / Daily_Test_All) %>%
-                            mutate(Total_Positive_Prop = Total_Test_Positive / Total_Test_All) 
+  all_us <- add_US(us_ct_clean) %>%
+            mutate(Daily_Positive_Prop = Daily_Test_Positive / Daily_Test_All) %>%
+            mutate(Total_Positive_Prop = Total_Test_Positive / Total_Test_All) 
     
   #combine all US data with rest of data
   us_ct_clean = rbind(us_ct_clean,all_us)
@@ -110,11 +133,7 @@ get_data <- function()
     select(-state_abr)
   
   #add all US by summing over all variables
-  all_us <- us_nyt_clean %>% 
-            group_by(Date) %>% 
-            summarize_if(is.numeric, sum, na.rm=TRUE) %>%
-            mutate(Location = "US") %>%
-            mutate(Population_Size = max(Population_Size))
+  all_us <- add_US(us_nyt_clean) 
   
   us_nyt_clean = rbind(us_nyt_clean,all_us)
   #reformat to long
@@ -125,14 +144,15 @@ get_data <- function()
   #################################
   county_nyt_data <- readr::read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
   county_nyt <- county_nyt_data %>% 
-                      rename(Location = state, county_name = county, Date = date, Total_Cases = cases, Total_Deaths = deaths) %>%
-                      select(-fips) %>%
-                      group_by(Location, county_name) %>% 
-                      arrange(Date) %>%
-                      mutate(Daily_Cases = c(0,diff(Total_Cases))) %>%
-                      mutate(Daily_Deaths = c(0,diff(Total_Deaths)))
+                select(-fips) %>%
+                group_by(state, county) %>% 
+                arrange(date) %>%
+                      mutate(Daily_Cases = c(0,diff(cases))) %>%
+                      mutate(Daily_Deaths = c(0,diff(deaths))) %>%
+              rename(Location = state, county_name = county, Date = date, Total_Cases = cases, Total_Deaths = deaths) 
+    
   #standardize county names and add population size
-  county_nyt <- clean_counties(county_nyt)
+  county_nyt <- clean_counties(county_nyt,county_popsize)
   #reformat to long
   county_nyt_clean <- gather(county_nyt, variable, value, -Location, -Population_Size, -Date, -county_name)
 
@@ -179,8 +199,21 @@ get_data <- function()
                   group_by(Location) %>% 
                   arrange(Date)  %>%
                   ungroup()
+
   
+  #add all US by summing over all variables
+  all_us <- add_US(usafct_clean)
+  usafct_clean = rbind(usafct_clean,all_us)
+  #reformat to long
+  usafct_clean <- to_long(usafct_clean)
+  
+    
   #County data cleaning-cases
+  #******
+  #let's not use the R internal state dataset, but instead just work with ours
+  #also, see if you can rewrite that line (and as much of code as you can think of)
+  #in the tidy format. Here e.g. mutate() added to code block below will likely do the trick
+  #*****
   usafct_case_data$State <- state.name[match(usafct_case_data$State, state.abb)]
   
   county_usafct_case <- usafct_case_data %>% 
@@ -191,8 +224,9 @@ get_data <- function()
                         mutate(Date = as.Date(Date,format="%m/%d/%y")) %>%
                         group_by(Location, county_name) %>% arrange(Date) %>%
                         mutate(Daily_Cases = c(0,diff(Total_Cases))) 
-  #standardize county names and add population size
-  county_usafct_case_clean <- clean_counties(county_usafct_case)
+  
+                        #standardize county names and add population size
+  county_usafct_case_clean <- clean_counties(county_usafct_case,county_popsize)
   
   #County data cleaning-deaths
   usafct_death_data$State <- state.name[match(usafct_death_data$State, state.abb)]
@@ -205,7 +239,7 @@ get_data <- function()
                          group_by(Location, county_name) %>% arrange(Date) %>%
                          mutate(Daily_Deaths = c(0,diff(Total_Deaths))) 
   #standardize county names and add population size
-  county_usafct_death_clean <- clean_counties(county_usafct_death)
+  county_usafct_death_clean <- clean_counties(county_usafct_death,county_popsize)
   
   #combine county data
   county_usafct_clean <- merge(county_usafct_case_clean, county_usafct_death_clean)
@@ -213,16 +247,6 @@ get_data <- function()
   #reformat county to long
   county_usafct_clean <- gather(county_usafct_clean, variable, value, -county_name, -Location, -Date, -Population_Size)
   
-  #add all US by summing over all variables
-  all_us <- usafct_clean %>% 
-            group_by(Date) %>% 
-            summarize_if(is.numeric, sum, na.rm=TRUE) %>%
-            mutate(Location = "US") %>%
-            mutate(Population_Size = max(Population_Size))
-  
-  usafct_clean = rbind(usafct_clean,all_us)
-  #reformat to long
-  usafct_clean <- to_long(usafct_clean)
 
   
   #################################
@@ -238,7 +262,7 @@ get_data <- function()
                   gather(Date, Cases, -Location, -FIPS, -Admin2)
   
   # Clean deaths
-  us_jhu_deaths <- us_jhu_deaths %>% filter(iso3 == "USA") %>%
+  us_jhu_deaths_clean <- us_jhu_deaths %>% filter(iso3 == "USA") %>%
                   dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -Combined_Key, -Population)) %>%
                   rename(Location = Province_State) %>%
                   gather(Date, Deaths, -Location, -FIPS, Admin2)
@@ -263,12 +287,14 @@ get_data <- function()
     select(-c(Population_Size, FIPS)) %>%
     rename(Population_Size = population_size)
   
+  #***************************
+  #what's the aggregate function doing in the code below?
+  #***************************
   #pull state data and aggregate county values
   us_jhu_clean <- us_jhu_total %>% select(-FIPS, -county_name)
   us_jhu_clean <- aggregate(. ~ Location + Date + Population_Size, us_jhu_clean, FUN = sum)
   #add total US values
-  all_us <- us_jhu_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
-  all_us$Location = "US"
+  all_us <- add_US(us_jhu_clean)
   us_jhu_clean = rbind(us_jhu_clean,all_us)
   #reformat state data to long
   us_jhu_clean <- to_long(us_jhu_clean)
@@ -335,8 +361,10 @@ get_data <- function()
   us_dat <- dplyr::bind_rows(us_ct_clean, us_nyt_clean, us_jhu_clean, usafct_clean) %>%
             rename(date = Date, location = Location, populationsize = Population_Size)
   
+  
   #reorder columns
   us_dat <- us_dat[c("source","location","populationsize","date","variable","value")]
+  
   
   # give each world dataset a source label
   world_source_var = c("JHU", "OWID")
