@@ -39,6 +39,24 @@ get_data <- function()
   all_data = list() #will save and return all datasets as list
   
   #################################
+  # make functions
+  #################################
+  
+  #function to reformat datasets to long format following import cleaning
+  to_long <- function(df){
+    long_format <- gather(df, variable, value, -Location, -Population_Size, -Date)
+    return(long_format)
+  }
+  
+  #function to standardize county names from different datasets then merge with the county_popsize data
+  clean_counties <- function(df){
+    extract_words <- c(" city", " City", " City and Borough", " Census Area"," County", " Borough",  "Municipality of ", " County and City", " Parish", " Municipality")
+    df$county_name <- tm::removeWords(df$county_name, extract_words)
+    county_complete <- merge(df, county_popsize) %>% rename(Population_Size = population_size)
+    return(county_complete)
+  }
+  
+  #################################
   # pull state level and testing data from Covidtracking and process
   #################################
   us_ct_data <- read_csv("https://covidtracking.com/api/v1/states/daily.csv")
@@ -74,7 +92,7 @@ get_data <- function()
   us_ct_clean = rbind(us_ct_clean,all_us)
   
   #reformat to long
-  us_ct_clean <- gather(us_ct_clean, variable, value, -Location, -Population_Size, -Date)
+  us_ct_clean <-  to_long(us_ct_clean)
   us_ct_clean$value[!is.finite(us_ct_clean$value)] <- NA
   us_ct_clean <- na.omit(us_ct_clean)
   
@@ -100,8 +118,8 @@ get_data <- function()
   
   us_nyt_clean = rbind(us_nyt_clean,all_us)
   #reformat to long
-  us_nyt_clean <- gather(us_nyt_clean, variable, value, -Location, -Population_Size, -Date)
-  
+  us_nyt_clean <- to_long(us_nyt_clean)
+
   #################################
   # pull county data from NYT and process
   #################################
@@ -113,11 +131,8 @@ get_data <- function()
                       arrange(Date) %>%
                       mutate(Daily_Cases = c(0,diff(Total_Cases))) %>%
                       mutate(Daily_Deaths = c(0,diff(Total_Deaths)))
-  #standardize county names
-  extract_words <- c(" city", " Borough", " City", " City and Borough", " Census Area")
-  county_nyt$county_name <- tm::removeWords(county_nyt$county_name, extract_words)
-  county_nyt <- merge(county_nyt, county_popsize) %>%
-    rename(Population_Size = population_size)
+  #standardize county names and add population size
+  county_nyt <- clean_counties(county_nyt)
   #reformat to long
   county_nyt_clean <- gather(county_nyt, variable, value, -Location, -Population_Size, -Date, -county_name)
 
@@ -176,10 +191,8 @@ get_data <- function()
                         mutate(Date = as.Date(Date,format="%m/%d/%y")) %>%
                         group_by(Location, county_name) %>% arrange(Date) %>%
                         mutate(Daily_Cases = c(0,diff(Total_Cases))) 
-  #remove words to match county level population values
-  remove_words <- c(" County", " Borough", " Census Area", "Municipality of "," City and Borough", " County and City", " Parish", " Municipality")
-  county_usafct_case$county_name <- tm::removeWords(county_usafct_case$county_name, remove_words)
-  county_usafct_case_clean <- merge(county_usafct_case, county_popsize)
+  #standardize county names and add population size
+  county_usafct_case_clean <- clean_counties(county_usafct_case)
   
   #County data cleaning-deaths
   usafct_death_data$State <- state.name[match(usafct_death_data$State, state.abb)]
@@ -191,14 +204,11 @@ get_data <- function()
                          mutate(Date = as.Date(Date,format="%m/%d/%y")) %>%
                          group_by(Location, county_name) %>% arrange(Date) %>%
                          mutate(Daily_Deaths = c(0,diff(Total_Deaths))) 
-  #remove words to match county level population values
-  county_usafct_death$county_name <- tm::removeWords(county_usafct_death$county_name, remove_words)
-  county_usafct_death_clean <- merge(county_usafct_death, county_popsize)
-  
+  #standardize county names and add population size
+  county_usafct_death_clean <- clean_counties(county_usafct_death)
   
   #combine county data
-  county_usafct_clean <- merge(county_usafct_case_clean, county_usafct_death_clean) %>%
-                         rename(Population_Size = population_size)
+  county_usafct_clean <- merge(county_usafct_case_clean, county_usafct_death_clean)
   
   #reformat county to long
   county_usafct_clean <- gather(county_usafct_clean, variable, value, -county_name, -Location, -Date, -Population_Size)
@@ -212,8 +222,8 @@ get_data <- function()
   
   usafct_clean = rbind(usafct_clean,all_us)
   #reformat to long
-  usafct_clean <- gather(usafct_clean, variable, value, -Location, -Population_Size, -Date)
-  
+  usafct_clean <- to_long(usafct_clean)
+
   
   #################################
   # pull US data from JHU github and process
@@ -221,22 +231,21 @@ get_data <- function()
   us_jhu_cases <- readr::read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv")
   us_jhu_deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv")
   # Clean cases
-  us_jhu_cases <- us_jhu_cases %>% 
+  us_jhu_cases_clean <- us_jhu_cases %>% 
                   filter(iso3 == "USA") %>%
                   dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -Combined_Key)) %>%
-                  rename(Location = Province_State)
+                  rename(Location = Province_State) %>%
+                  gather(Date, Cases, -Location, -FIPS, -Admin2)
   
-  us_jhu_cases_clean <- gather(us_jhu_cases, Date, Cases, -Location, -FIPS, -Admin2)
   # Clean deaths
   us_jhu_deaths <- us_jhu_deaths %>% filter(iso3 == "USA") %>%
-    dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -Combined_Key, -Population)) %>%
-    rename(Location = Province_State)
-  us_jhu_deaths <- aggregate(. ~ Location + FIPS + Admin2, us_jhu_deaths, FUN = sum)
-  us_jhu_deaths_clean <- gather(us_jhu_deaths, Date, Deaths, -Location, -FIPS, Admin2)
+                  dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -Combined_Key, -Population)) %>%
+                  rename(Location = Province_State) %>%
+                  gather(Date, Deaths, -Location, -FIPS, Admin2)
+  #combine cases and deaths
   us_jhu_combined <- merge(us_jhu_cases_clean, us_jhu_deaths_clean)
   us_jhu_combined$Deaths <- as.numeric(as.character(us_jhu_combined$Deaths))
   us_jhu_popsize <- us_popsize %>% rename(Location = state)
-  # This merge removes cruise ship cases/death counts
   us_jhu_merge <- merge(us_jhu_combined, us_jhu_popsize)
   us_jhu_total <- us_jhu_merge %>% mutate(Date = as.Date(as.character(Date),format="%m/%d/%y")) %>%
     group_by(Location, Admin2) %>% arrange(Date) %>%
@@ -262,8 +271,8 @@ get_data <- function()
   all_us$Location = "US"
   us_jhu_clean = rbind(us_jhu_clean,all_us)
   #reformat state data to long
-  us_jhu_clean <- gather(us_jhu_clean, variable, value, -Location, -Population_Size, -Date)
-  
+  us_jhu_clean <- to_long(us_jhu_clean)
+
   
   #################################
   # pull world data from JHU github and process
@@ -290,8 +299,8 @@ get_data <- function()
     ungroup() %>%
     rename(Date = date, Total_Deaths = deaths, Total_Cases = cases, Location = country, Population_Size = country_pop) 
   #reformat to long
-  world_jhu_clean <- gather(world_jhu_clean, variable, value, -Location, -Population_Size, -Date)
-  
+  world_jhu_clean <- to_long(world_jhu_clean)
+
   
   #################################
   # pull world data from OWID github and process
@@ -307,8 +316,8 @@ get_data <- function()
     mutate(Total_Positive_Prop = Total_Test_Positive / Total_Test_All) %>%
     select( - contains('thousand'), - contains('million'))
   #reformat to long
-  world_owid_clean <- gather(world_owid_clean, variable, value, -Location, -Population_Size, -Date)
-  
+  world_owid_clean <- to_long(world_owid_clean)
+
   #################################
   # combine all data 
   #################################
