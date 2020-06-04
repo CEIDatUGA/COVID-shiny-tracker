@@ -75,15 +75,8 @@ get_data <- function()
   
   #reformat to long
   us_ct_clean <- gather(us_ct_clean, variable, value, -Location, -Population_Size, -Date)
-  
-  #*************************************
-  #I don't understand why this aggregation is done here   
-  #Are there duplicate values? If yes, shouldn't we remove the duplicates instead of summing?
-  #*************************************
-  us_ct_clean <- aggregate(value ~ Date + Location + Population_Size + variable, us_ct_clean, FUN = sum)
   us_ct_clean$value[!is.finite(us_ct_clean$value)] <- NA
-  us_ct_clean[!is.na(us_ct_clean$value), ]														
-  
+  us_ct_clean <- na.omit(us_ct_clean)
   
   #################################
   # pull state level data from NYT and process
@@ -171,46 +164,37 @@ get_data <- function()
                   group_by(Location) %>% 
                   arrange(Date)  %>%
                   ungroup()
-                
-  
-  #*************************************
-  #Why is us_popsize merged with the data frame below and not county_popsize?
-  #same for deaths below
-  #*************************************
   
   #County data cleaning-cases
+  usafct_case_data$State <- state.name[match(usafct_case_data$State, state.abb)]
+  
   county_usafct_case <- usafct_case_data %>% 
                         select(-c(countyFIPS, stateFIPS)) %>%
-                        rename(state_abr = State, county_name = `County Name`) %>%
+                        rename(Location = State, county_name = `County Name`) %>%
                         dplyr::filter(county_name != "Statewide Unallocated") %>%
-                        left_join(us_popsize) %>%
-                        select(-c(state_abr, total_pop)) %>%
-                        gather(Date, Total_Cases, -state, -county_name) %>%
+                        gather(Date, Total_Cases, -Location, -county_name) %>%
                         mutate(Date = as.Date(Date,format="%m/%d/%y")) %>%
-                        group_by(state, county_name) %>% arrange(Date) %>%
-                        mutate(Daily_Cases = c(0,diff(Total_Cases))) %>%
-                        rename(Location = state)
+                        group_by(Location, county_name) %>% arrange(Date) %>%
+                        mutate(Daily_Cases = c(0,diff(Total_Cases))) 
   #remove words to match county level population values
   remove_words <- c(" County", " Borough", " Census Area", "Municipality of "," City and Borough", " County and City", " Parish", " Municipality")
   county_usafct_case$county_name <- tm::removeWords(county_usafct_case$county_name, remove_words)
   county_usafct_case_clean <- merge(county_usafct_case, county_popsize)
   
-  
   #County data cleaning-deaths
+  usafct_death_data$State <- state.name[match(usafct_death_data$State, state.abb)]
   county_usafct_death <- usafct_death_data %>% 
                          select(-c(countyFIPS, stateFIPS)) %>%
-                         rename(state_abr = State, county_name = `County Name`) %>%
+                         rename(Location = State, county_name = `County Name`) %>%
                          dplyr::filter(county_name != "Statewide Unallocated") %>%
-                         left_join(us_popsize) %>%
-                         select(-c(state_abr, total_pop)) %>%
-                         gather(Date, Total_Deaths, -state, -county_name) %>%
-                          mutate(Date = as.Date(Date,format="%m/%d/%y")) %>%
-                          group_by(state, county_name) %>% arrange(Date) %>%
-                          mutate(Daily_Deaths = c(0,diff(Total_Deaths))) %>%
-                          rename(Location = state)
+                         gather(Date, Total_Deaths, -Location, -county_name) %>%
+                         mutate(Date = as.Date(Date,format="%m/%d/%y")) %>%
+                         group_by(Location, county_name) %>% arrange(Date) %>%
+                         mutate(Daily_Deaths = c(0,diff(Total_Deaths))) 
   #remove words to match county level population values
   county_usafct_death$county_name <- tm::removeWords(county_usafct_death$county_name, remove_words)
   county_usafct_death_clean <- merge(county_usafct_death, county_popsize)
+  
   
   #combine county data
   county_usafct_clean <- merge(county_usafct_case_clean, county_usafct_death_clean) %>%
@@ -242,11 +226,6 @@ get_data <- function()
                   dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -Combined_Key)) %>%
                   rename(Location = Province_State)
   
-  #*************************************
-  #What does the aggregate function below do, why is it needed?
-  #*************************************
-  
-  us_jhu_cases <- aggregate(. ~ Location + FIPS + Admin2, us_jhu_cases, FUN = sum)
   us_jhu_cases_clean <- gather(us_jhu_cases, Date, Cases, -Location, -FIPS, -Admin2)
   # Clean deaths
   us_jhu_deaths <- us_jhu_deaths %>% filter(iso3 == "USA") %>%
@@ -267,13 +246,7 @@ get_data <- function()
     rename(Total_Deaths = Deaths, Total_Cases = Cases, Population_Size = total_pop, county_name = Admin2) %>% 
     select(-state_abr) 
   
-  #add all US by summing over all variables
-  all_us <- us_jhu_total %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE) %>%
-    mutate(county_name = "NA")
-  all_us$Location = "US"
-  all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
-  us_jhu_total = rbind(us_jhu_total,all_us)
-  
+  #Use us_jhu_total to create both the county and state level datasets 
   #Pull county data and reformat to long
   county_jhu_clean <- gather(us_jhu_total, variable, value, -Location, -Population_Size, -Date, -FIPS, -county_name) 
   #add county population numbers 
@@ -281,9 +254,13 @@ get_data <- function()
     select(-c(Population_Size, FIPS)) %>%
     rename(Population_Size = population_size)
   
-  #finalize state data
+  #pull state data and aggregate county values
   us_jhu_clean <- us_jhu_total %>% select(-FIPS, -county_name)
   us_jhu_clean <- aggregate(. ~ Location + Date + Population_Size, us_jhu_clean, FUN = sum)
+  #add total US values
+  all_us <- us_jhu_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+  all_us$Location = "US"
+  us_jhu_clean = rbind(us_jhu_clean,all_us)
   #reformat state data to long
   us_jhu_clean <- gather(us_jhu_clean, variable, value, -Location, -Population_Size, -Date)
   
