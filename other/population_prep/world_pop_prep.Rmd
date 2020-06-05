@@ -45,7 +45,7 @@ remove_words <- c("County", "Parish", "city", "City", "Census Area", "Borough", 
 county_pop <- readxl::read_excel("./county_pop.xlsx")
 county_pop$county_name <- gsub('^.', '', county_pop$county_name)
 county_pop$county_name <- removeWords(county_pop$county_name, remove_words)
-county_pop <- separate(county_pop, col = county_name, into = c("county_name","Location"), sep = " , ")
+county_pop <- separate(county_pop, col = county_name, into = c("county_name","state"), sep = " , ") 
 
 saveRDS(county_pop, file = "../../data/county_popsize.rds")
 ```
