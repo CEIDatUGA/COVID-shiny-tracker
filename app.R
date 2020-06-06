@@ -9,10 +9,46 @@ library(ggplot2)
 library(plotly)
 library(RColorBrewer)
 library(tidyselect)
+library(tm)
 
 #prevent shiny from overwriting our error message
 #not used right now, using safeError below instead
 #options(shiny.sanitize.errors = FALSE)
+
+#******************************
+#general: let's try to do as much using the tidyverse style/functions as possible
+#if possible get rid of merge() and replace with one of the join_ functions
+#also, gather() is outdated, if possible use pivot_longer
+#instead of rbind and cbind, bind_rows and bind_cols is better
+#*****************************
+
+
+#################################
+# make functions
+#################################
+
+#function to reformat datasets to long format following import cleaning
+to_long <- function(df){
+  long_format <- gather(df, variable, value, -Location, -Population_Size, -Date)
+  return(long_format)
+}
+
+#function to standardize county names from different datasets then merge with the county_popsize data
+clean_counties <- function(df,county_popsize){
+  extract_words <- c(" city", " City", " City and Borough", " Census Area"," County", " Borough",  "Municipality of ", " County and City", " Parish", " Municipality")
+  df$county_name <- tm::removeWords(df$county_name, extract_words)
+  county_complete <- merge(df, county_popsize) %>% rename(Population_Size = population_size)
+  return(county_complete)
+}
+
+#function to add all US to data
+add_US <- function(df){
+  df_new <- df %>% group_by(Date) %>% 
+                   summarize_if(is.numeric, sum, na.rm=TRUE) %>%
+                   mutate(Location = "US") %>%
+                   mutate(Population_Size = max(Population_Size))
+  return(df_new)
+}
 
 #################################
 # Load all data
@@ -30,24 +66,36 @@ get_data <- function()
   }
   #if data file is not here, go through all of the below
   
+  #*******************************
+  #let's get the popsize files standardized 
+  #rename the population size to pop_size in each file
+  #rename Location to state for county_popsize and add state_abr
+  #all variable names lower case
+  #might require a few lines of code adjustment in the cleaning code
+  #******************************
+  
   #data for population size for each state/country so we can compute cases per 100K
   us_popsize <- readRDS(here("data","us_popsize.rds")) %>% rename(state_abr = state, state = state_full)
-  world_popsize <-readRDS(here("data","world_popsize.rds")) 
+  world_popsize <-readRDS(here("data","world_popsize.rds"))
+  county_popsize <- readRDS(here("data", "county_popsize.rds"))
   
   all_data = list() #will save and return all datasets as list
   
+   
   #################################
-  # pull data from Covidtracking and process
+  # pull state level and testing data from Covidtracking and process
   #################################
   us_ct_data <- read_csv("https://covidtracking.com/api/v1/states/daily.csv")
   us_ct_clean <- us_ct_data %>% dplyr::select(c(date,state,positive,negative,total,hospitalized,death)) %>%
     mutate(date = as.Date(as.character(date),format="%Y%m%d")) %>% 
-    group_by(state) %>% arrange(date) %>%
+    group_by(state) %>% 
+    arrange(date) %>%
     mutate(Daily_Test_Positive = c(0,diff(positive))) %>% 
     mutate(Daily_Test_Negative = c(0,diff(negative))) %>% 
     mutate(Daily_Test_All = c(0,diff(total))) %>% 
     mutate(Daily_Hospitalized = c(0,diff(hospitalized))) %>% 
-    mutate(Daily_Deaths = c(0,diff(death))) %>% rename(state_abr = state) %>%
+    mutate(Daily_Deaths = c(0,diff(death))) %>% 
+    rename(state_abr = state) %>%
     merge(us_popsize) %>%
     rename(Date = date, Location = state, Population_Size = total_pop, Total_Deaths = death, 
            Total_Cases = positive, Total_Hospitalized = hospitalized, 
@@ -59,96 +107,147 @@ get_data <- function()
   
   #add all US by summing over all variables
   #adding is not right approach for proportion test positive, so need to recompute
-  all_us <- us_ct_clean %>% group_by(Date) %>% 
-                            summarize_if(is.numeric, sum, na.rm=TRUE) %>%
-                            mutate(Location = "US") %>%
-                            mutate(Population_Size = max(Population_Size)) %>%
-                            mutate(Daily_Positive_Prop = Daily_Test_Positive / Daily_Test_All) %>%
-                            mutate(Total_Positive_Prop = Total_Test_Positive / Total_Test_All) 
+  all_us <- add_US(us_ct_clean) %>%
+            mutate(Daily_Positive_Prop = Daily_Test_Positive / Daily_Test_All) %>%
+            mutate(Total_Positive_Prop = Total_Test_Positive / Total_Test_All) 
     
-  
+  #combine all US data with rest of data
   us_ct_clean = rbind(us_ct_clean,all_us)
   
   #reformat to long
-  us_ct_clean <- gather(us_ct_clean, variable, value, -Location, -Population_Size, -Date)
-  #aggregate repedative date + location entries
-  us_ct_clean <- aggregate(value ~ variable + Date + Location + Population_Size, us_ct_clean, FUN = sum)
+  us_ct_clean <-  to_long(us_ct_clean)
   us_ct_clean$value[!is.finite(us_ct_clean$value)] <- NA
-  us_ct_clean[!is.na(us_ct_clean$value), ]														
-  
+  us_ct_clean <- na.omit(us_ct_clean)
   
   #################################
-  # pull data from NYT and process
+  # pull state level data from NYT and process
   #################################
   us_nyt_data <- readr::read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv")
   us_nyt_clean <- us_nyt_data %>% dplyr::select(c(date,state,cases,deaths)) %>%
-    group_by(state) %>% arrange(date) %>%
+    group_by(state) %>% 
+    arrange(date) %>%
     mutate(Daily_Cases = c(0,diff(cases))) %>% 
     mutate(Daily_Deaths = c(0,diff(deaths))) %>%
     merge(us_popsize) %>%
-    rename(Date = date, Location = state, Population_Size = total_pop, Total_Deaths = deaths, 
-           Total_Cases = cases)  %>%
+    rename(Date = date, Location = state, Population_Size = total_pop, Total_Deaths = deaths, Total_Cases = cases)  %>%
     select(-state_abr)
   
   #add all US by summing over all variables
-  all_us <- us_nyt_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
-  all_us$Location = "US"
-  all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
+  all_us <- add_US(us_nyt_clean) 
+  
   us_nyt_clean = rbind(us_nyt_clean,all_us)
   #reformat to long
-  us_nyt_clean <- gather(us_nyt_clean, variable, value, -Location, -Population_Size, -Date)
+  us_nyt_clean <- to_long(us_nyt_clean)
+
+  #################################
+  # pull county data from NYT and process
+  #################################
+  county_nyt_data <- readr::read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+  county_nyt <- county_nyt_data %>% 
+                select(-fips) %>%
+                group_by(state, county) %>% 
+                arrange(date) %>%
+                      mutate(Daily_Cases = c(0,diff(cases))) %>%
+                      mutate(Daily_Deaths = c(0,diff(deaths))) %>%
+              rename(Location = state, county_name = county, Date = date, Total_Cases = cases, Total_Deaths = deaths) 
+    
+  #standardize county names and add population size
+  county_nyt <- clean_counties(county_nyt,county_popsize)
+  #reformat to long
+  county_nyt_clean <- gather(county_nyt, variable, value, -Location, -Population_Size, -Date, -county_name)
 
   #################################
   # pull data from USAFacts and process
   #################################
+  #pull data
   usafct_case_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_confirmed_usafacts.csv")
-  state_df = usafct_case_data %>% distinct(stateFIPS, .keep_all = TRUE) %>% select(3:4)
-  usafct_case_clean <- usafct_case_data %>% 
-    dplyr::group_by(stateFIPS) %>% 
-    summarize_if(is.numeric, sum, na.rm=TRUE) %>%
-    dplyr::select(-countyFIPS) %>% 
-    left_join(state_df) %>%    
-    tidyr::pivot_longer(-State, names_to = "Date", values_to = "Total_Cases") %>%
-    mutate(Date = as.Date(Date,format="%m/%d/%y")) %>% 
-    group_by(State) %>% arrange(Date) %>%
-    mutate(Daily_Cases = c(0,diff(Total_Cases))) %>% 
-    rename(state_abr = State) %>%
-    merge(us_popsize) %>%
-    rename(Location = state, Population_Size = total_pop) %>%
-    select(-c(state_abr))
-  #Remove duplicates
-  usafct_case_clean <- usafct_case_clean %>% distinct(Location, Date, .keep_all = TRUE)
-  
   usafct_death_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_deaths_usafacts.csv")
-  state_df = usafct_death_data %>% distinct(stateFIPS, .keep_all = TRUE) %>% select(3:4)
-  usafct_death_clean <- usafct_death_data %>% 
-    dplyr::group_by(stateFIPS) %>% 
-    summarize_if(is.numeric, sum, na.rm=TRUE) %>%
-    dplyr::select(-countyFIPS) %>% 
-    left_join(state_df) %>%    
-    tidyr::pivot_longer(-State, names_to = "Date", values_to = "Total_Deaths") %>%
-    mutate(Date = as.Date(Date,format="%m/%d/%y")) %>% 
-    group_by(State) %>% arrange(Date) %>%
-    mutate(Daily_Deaths = c(0,diff(Total_Deaths))) %>% 
-    rename(state_abr = State) %>%
-    merge(us_popsize) %>%
-    rename(Location = state, Population_Size = total_pop) %>%
-    select(-state_abr, -Population_Size)
-  #Remove duplicates
-  usafct_death_clean <- usafct_death_clean %>% distinct(Location, Date, .keep_all = TRUE)
   
+  state_df = usafct_case_data %>% 
+             distinct(stateFIPS, .keep_all = TRUE) %>% 
+             select(State,stateFIPS)
+
+  usafct_case_clean <- usafct_case_data %>% 
+                      dplyr::group_by(stateFIPS) %>% 
+                      summarize_if(is.numeric, sum, na.rm=TRUE) %>%
+                      dplyr::select(-countyFIPS) %>% 
+                      left_join(state_df) %>%    
+                      tidyr::pivot_longer(-State, names_to = "Date", values_to = "Total_Cases") %>%
+                      mutate(Date = as.Date(Date,format="%m/%d/%y")) %>% 
+                      group_by(State) %>% arrange(Date) %>%
+                      mutate(Daily_Cases = c(0,diff(Total_Cases))) %>% 
+                      rename(state_abr = State) %>%
+                      merge(us_popsize) %>%
+                      rename(Location = state, Population_Size = total_pop) %>%
+                      select(-c(state_abr))
+  
+  usafct_death_clean <- usafct_death_data %>% 
+                        dplyr::group_by(stateFIPS) %>% 
+                        summarize_if(is.numeric, sum, na.rm=TRUE) %>%
+                        dplyr::select(-countyFIPS) %>% 
+                        left_join(state_df) %>%    
+                        tidyr::pivot_longer(-State, names_to = "Date", values_to = "Total_Deaths") %>%
+                        mutate(Date = as.Date(Date,format="%m/%d/%y")) %>% 
+                        group_by(State) %>% arrange(Date) %>%
+                        mutate(Daily_Deaths = c(0,diff(Total_Deaths))) %>% 
+                        rename(state_abr = State) %>%
+                        merge(us_popsize) %>%
+                        rename(Location = state, Population_Size = total_pop) %>%
+                        select(-c(state_abr))
+                      
   usafct_clean <- left_join(usafct_case_clean, usafct_death_clean) %>%
-    group_by(Location) %>% arrange(Date)  %>%
-    ungroup()
+                  group_by(Location) %>% 
+                  arrange(Date)  %>%
+                  ungroup()
+
   
   #add all US by summing over all variables
-  all_us <- usafct_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
-  all_us$Location = "US"
-  all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
+  all_us <- add_US(usafct_clean)
   usafct_clean = rbind(usafct_clean,all_us)
   #reformat to long
-  usafct_clean <- gather(usafct_clean, variable, value, -Location, -Population_Size, -Date)
+  usafct_clean <- to_long(usafct_clean)
   
+    
+  #County data cleaning-cases
+  #******
+  #let's not use the R internal state dataset, but instead just work with ours
+  #also, see if you can rewrite that line (and as much of code as you can think of)
+  #in the tidy format. Here e.g. mutate() added to code block below will likely do the trick
+  #*****
+  usafct_case_data$State <- state.name[match(usafct_case_data$State, state.abb)]
+  
+  county_usafct_case <- usafct_case_data %>% 
+                        select(-c(countyFIPS, stateFIPS)) %>%
+                        rename(Location = State, county_name = `County Name`) %>%
+                        dplyr::filter(county_name != "Statewide Unallocated") %>%
+                        gather(Date, Total_Cases, -Location, -county_name) %>%
+                        mutate(Date = as.Date(Date,format="%m/%d/%y")) %>%
+                        group_by(Location, county_name) %>% arrange(Date) %>%
+                        mutate(Daily_Cases = c(0,diff(Total_Cases))) 
+  
+                        #standardize county names and add population size
+  county_usafct_case_clean <- clean_counties(county_usafct_case,county_popsize)
+  
+  #County data cleaning-deaths
+  usafct_death_data$State <- state.name[match(usafct_death_data$State, state.abb)]
+  county_usafct_death <- usafct_death_data %>% 
+                         select(-c(countyFIPS, stateFIPS)) %>%
+                         rename(Location = State, county_name = `County Name`) %>%
+                         dplyr::filter(county_name != "Statewide Unallocated") %>%
+                         gather(Date, Total_Deaths, -Location, -county_name) %>%
+                         mutate(Date = as.Date(Date,format="%m/%d/%y")) %>%
+                         group_by(Location, county_name) %>% arrange(Date) %>%
+                         mutate(Daily_Deaths = c(0,diff(Total_Deaths))) 
+  #standardize county names and add population size
+  county_usafct_death_clean <- clean_counties(county_usafct_death,county_popsize)
+  
+  #combine county data
+  county_usafct_clean <- merge(county_usafct_case_clean, county_usafct_death_clean)
+  
+  #reformat county to long
+  county_usafct_clean <- gather(county_usafct_clean, variable, value, -county_name, -Location, -Date, -Population_Size)
+  
+
   
   #################################
   # pull US data from JHU github and process
@@ -156,38 +255,51 @@ get_data <- function()
   us_jhu_cases <- readr::read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv")
   us_jhu_deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv")
   # Clean cases
-  us_jhu_cases <- us_jhu_cases %>% filter(iso3 == "USA") %>%
-    dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -FIPS, -Admin2, -Combined_Key)) %>%
-    rename(Location = Province_State)
-  us_jhu_cases <- aggregate(. ~ Location, us_jhu_cases, FUN = sum)
-  us_jhu_cases_clean <- gather(us_jhu_cases, Date, Cases, -Location)
+  us_jhu_cases_clean <- us_jhu_cases %>% 
+                  filter(iso3 == "USA") %>%
+                  dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -Combined_Key)) %>%
+                  rename(Location = Province_State) %>%
+                  gather(Date, Cases, -Location, -FIPS, -Admin2)
+  
   # Clean deaths
-  us_jhu_deaths <- us_jhu_deaths %>% filter(iso3 == "USA") %>%
-    dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -FIPS, -Admin2, -Combined_Key, -Population)) %>%
-    rename(Location = Province_State)
-  us_jhu_deaths <- aggregate(. ~ Location, us_jhu_deaths, FUN = sum)
-  us_jhu_deaths_clean <- gather(us_jhu_deaths, Date, Deaths, -Location)
+  us_jhu_deaths_clean <- us_jhu_deaths %>% filter(iso3 == "USA") %>%
+                  dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -Combined_Key, -Population)) %>%
+                  rename(Location = Province_State) %>%
+                  gather(Date, Deaths, -Location, -FIPS, Admin2)
+  #combine cases and deaths
   us_jhu_combined <- merge(us_jhu_cases_clean, us_jhu_deaths_clean)
+  us_jhu_combined$Deaths <- as.numeric(as.character(us_jhu_combined$Deaths))
   us_jhu_popsize <- us_popsize %>% rename(Location = state)
-  # This merge removes cruise ship cases/death counts
   us_jhu_merge <- merge(us_jhu_combined, us_jhu_popsize)
-  us_jhu_clean <- us_jhu_merge %>% mutate(Date = as.Date(as.character(Date),format="%m/%d/%y")) %>%
-    group_by(Location) %>% arrange(Date) %>%
+  us_jhu_total <- us_jhu_merge %>% mutate(Date = as.Date(as.character(Date),format="%m/%d/%y")) %>%
+    group_by(Location, Admin2) %>% arrange(Date) %>%
     mutate(Daily_Cases = c(0,diff(Cases))) %>%
     mutate(Daily_Deaths = c(0,diff(Deaths))) %>% 
     ungroup() %>%
-    rename(Total_Deaths = Deaths, Total_Cases = Cases, Population_Size = total_pop) %>% 
+    rename(Total_Deaths = Deaths, Total_Cases = Cases, Population_Size = total_pop, county_name = Admin2) %>% 
     select(-state_abr) 
   
-  #add all US by summing over all variables
-  all_us <- us_jhu_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
-  all_us$Location = "US"
-  all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
-  us_jhu_clean = rbind(us_jhu_clean,all_us)
-  #reformat to long
-  us_jhu_clean <- gather(us_jhu_clean, variable, value, -Location, -Population_Size, -Date) 
+  #Use us_jhu_total to create both the county and state level datasets 
+  #Pull county data and reformat to long
+  county_jhu_clean <- gather(us_jhu_total, variable, value, -Location, -Population_Size, -Date, -FIPS, -county_name) 
+  #add county population numbers 
+  county_jhu_clean <- merge(county_jhu_clean, county_popsize) %>%
+    select(-c(Population_Size, FIPS)) %>%
+    rename(Population_Size = population_size)
   
-    
+  #***************************
+  #what's the aggregate function doing in the code below?
+  #***************************
+  #pull state data and aggregate county values
+  us_jhu_clean <- us_jhu_total %>% select(-FIPS, -county_name)
+  us_jhu_clean <- aggregate(. ~ Location + Date + Population_Size, us_jhu_clean, FUN = sum)
+  #add total US values
+  all_us <- add_US(us_jhu_clean)
+  us_jhu_clean = rbind(us_jhu_clean,all_us)
+  #reformat state data to long
+  us_jhu_clean <- to_long(us_jhu_clean)
+
+  
   #################################
   # pull world data from JHU github and process
   #################################
@@ -213,8 +325,8 @@ get_data <- function()
     ungroup() %>%
     rename(Date = date, Total_Deaths = deaths, Total_Cases = cases, Location = country, Population_Size = country_pop) 
   #reformat to long
-  world_jhu_clean <- gather(world_jhu_clean, variable, value, -Location, -Population_Size, -Date)
-  
+  world_jhu_clean <- to_long(world_jhu_clean)
+
   
   #################################
   # pull world data from OWID github and process
@@ -230,12 +342,13 @@ get_data <- function()
     mutate(Total_Positive_Prop = Total_Test_Positive / Total_Test_All) %>%
     select( - contains('thousand'), - contains('million'))
   #reformat to long
-  world_owid_clean <- gather(world_owid_clean, variable, value, -Location, -Population_Size, -Date)
-  
+  world_owid_clean <- to_long(world_owid_clean)
+
   #################################
   # combine all data 
   #################################
 
+  
   # give each US dataset a source label
   us_source_var = c("COVIDTracking","NYTimes","JHU","USAFacts")
   
@@ -249,8 +362,10 @@ get_data <- function()
   us_dat <- dplyr::bind_rows(us_ct_clean, us_nyt_clean, us_jhu_clean, usafct_clean) %>%
             rename(date = Date, location = Location, populationsize = Population_Size)
   
+  
   #reorder columns
   us_dat <- us_dat[c("source","location","populationsize","date","variable","value")]
+  
   
   # give each world dataset a source label
   world_source_var = c("JHU", "OWID")
@@ -264,9 +379,31 @@ get_data <- function()
   
   world_dat <- world_dat[c("source","location","populationsize","date","variable","value")]
   
+  # give each county dataset a source label
+  county_source_var = c("JHU", "USAFacts", "NYTimes")
+  
+  county_jhu_clean$source = county_source_var[1]
+  county_usafct_clean$source = county_source_var[2]
+  county_nyt_clean$source = county_source_var[3]
+  
+  #combine all county data from different sources
+  #also do all variable/column names in lowercase
+  county_dat <- dplyr::bind_rows(county_jhu_clean, county_usafct_clean, county_nyt_clean) %>%
+                rename(date = Date, location = county_name, populationsize = Population_Size, state = Location)
+  
+  #reorder columns
+  county_dat <- county_dat[c("source","location","state", "populationsize","date","variable","value")]
+  
+  #Sanatize negative values to zero
+  #Comment out the line below to keep negative values in the data for debugging
+  ############################################
+  county_dat$value[county_dat$value <0] <- 0
+  ############################################
+  
   #combine data in list  
   all_data$us_dat = us_dat
   all_data$world_dat = world_dat
+  all_data$county_dat = county_dat
    
   #save the data
   saveRDS(all_data, filename)    
@@ -289,16 +426,18 @@ all_dat = isolate(all_data())
 # pull data out of list 
 world_dat = all_dat$world_dat 
 us_dat = all_dat$us_dat 
-
+county_dat = all_dat$county_dat
 
 #define variables for location and source selectors
 state_var = sort(unique(us_dat$location))  
 state_var = c("US",state_var[!state_var=="US"]) #move US to front
 country_var = sort(unique(world_dat$location))
+county_var = sort(unique(county_dat$location))
+state_var_county = sort(unique(county_dat$state))
 
 us_source_var = unique(us_dat$source)
 world_source_var = unique(world_dat$source)
-
+county_source_var = unique(county_dat$source)
 
 #################################
 # Define UI
@@ -308,16 +447,16 @@ ui <- fluidPage(
   includeCSS(here("www","appstyle.css")),
   #main tabs
   navbarPage( title = "COVID-19 Tracker", id = 'current_tab', selected = "us", header = "",
-              tabPanel(title = "US", value = "us",
+              tabPanel(title = "US States", value = "us",
                        sidebarLayout(
                          sidebarPanel(
                            shinyWidgets::pickerInput("state_selector", "Select State(s)", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("Georgia","California","Washington") ),
                            shiny::div("US is at start of state list."),
                            br(),
                            shinyWidgets::pickerInput("source_selector", "Select Source(s)", us_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("COVIDTracking") ),
-                          shiny::div("Choose data sources (see 'About' tab for details)."),
-                          br(),
-                          shiny::selectInput( "case_death",   "Outcome",c("Cases" = "Cases", "Hospitalizations" = "Hospitalized", "Deaths" = "Deaths")),
+                           shiny::div("Choose data sources (see 'About' tab for details)."),
+                           br(),
+                           shiny::selectInput( "case_death",   "Outcome",c("Cases" = "Cases", "Hospitalizations" = "Hospitalized", "Deaths" = "Deaths")),
                            shiny::div("Modify the top plot to display cases, hospitalizations, or deaths."),
                            br(),
                            shiny::selectInput("daily_tot", "Daily or cumulative numbers", c("Daily" = "Daily", "Total" = "Total" )),
@@ -348,6 +487,43 @@ ui <- fluidPage(
                          ) #end main panel
                        ) #end sidebar layout     
               ), #close US tab
+              
+           
+              tabPanel( title = "US Counties", value = "county",
+                        sidebarLayout(
+                          sidebarPanel(
+                            #County selector 
+                            shinyWidgets::pickerInput("state_selector_c", "Select state", state_var_county,  multiple = FALSE, options = list(`actions-box` = TRUE), selected = c("Georgia")),
+                            shinyWidgets::pickerInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = county_var[1]),
+                            shinyWidgets::pickerInput("source_selector_c", "Select Source(s)", county_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") ),
+                            shiny::div("Choose data sources (see 'About' tab for details)."),
+                            br(),
+                            shiny::selectInput( "case_death_c", "Outcome", c("Cases" = "Cases", "Deaths" = "Deaths")),
+                            shiny::div("Modify the plot to display cases or deaths."),
+                            br(),
+                            shiny::selectInput("daily_tot_c", "Daily or cumulative numbers", c("Daily" = "Daily", "Total" = "Total")),
+                            shiny::div("Modify the plot to reflect daily or cumulative data."),
+                            br(),
+                            shiny::selectInput("show_smoother_c", "Add trend line", c("No" = "No", "Yes" = "Yes")),
+                            shiny::div("Shows a trend line for cases/hospitalizations/deaths plot."),
+                            br(),
+                            shiny::selectInput("absolute_scaled_c", "Absolute or scaled values", c("Absolute Number" = "actual", "Per 100,000 persons" = "scaled") ),
+                            shiny::div("Modify the plot to display total counts or values scaled by the county population size."),
+                            br(),
+                            sliderInput(inputId = "x_limit_c", "Select a date at which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") ),
+                            br(),
+                            shiny::selectInput(  "yscale_c", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
+                            shiny::div("Modify the plot to show data on a linear or logarithmic scale."),
+                            br()
+                          ), #end sidebar panel
+                          
+                          mainPanel(
+                            #change to plotOutput if using static ggplot object
+                            plotlyOutput(outputId = "county_case_death_plot", height = "500px")
+                          ) #end main panel
+                          
+                        ), #close sidebar layout
+              ), #close county tab
               
               tabPanel( title = "World", value = "world",
                         sidebarLayout(
@@ -390,7 +566,6 @@ ui <- fluidPage(
                         ), #close sidebar layout
               ), #close world tab
               
-              
               tabPanel( title = "About", value = "about",
                         tagList(    
                           fluidRow( #all of this is the header
@@ -416,7 +591,7 @@ ui <- fluidPage(
                             ),# and tag
                             tags$div(
                               id = "bigtext",
-                              "We currently include 4 different data sources for the US.", 
+                              "We currently include 4 different data sources for US states.", 
                               a("The Covid Tracking Project",  href = "https://covidtracking.com/", target = "_blank" ),
                               "data source reports all and positive tests, hospitalizations (some states) and deaths. We interpret positive tests as corresponding to new cases. The",
                               a("New York Times (NYT),", href = "https://github.com/nytimes/covid-19-data", target = "_blank" ),
@@ -424,6 +599,10 @@ ui <- fluidPage(
                               "and",
                               a("Johns Hopkins University Center for Systems Science and Engineering (JHU)", href = "https://github.com/CSSEGISandData/COVID-19", target = "_blank" ),
                               "sources report cases and deaths."
+                              ), 
+                            tags$div(
+                              id = "bigtext",
+                              "Three of these sources, JHU, NY Times and USA Facts, also provide data on the county level, those are included in the county tab."         
                               ), 
                             tags$div(
                               id = "bigtext",
@@ -506,8 +685,29 @@ server <- function(input, output, session) {
                  {
                    shiny::updateSliderInput(session, "x_limit_w", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") )
                  }
+               }) #end observe event 
+  
+  #watch the choice for the x-scale and choose what to show underneath accordingly
+  observeEvent(input$xscale_c,
+               {
+                 if (input$xscale_c == 'x_count')
+                 {
+                   #Add a reactive range to slider
+                   shiny::updateSliderInput(session, "x_limit_c", min = 1,  max = 500, step = 10, value = 1 )
+                 } else
+                 {
+                   shiny::updateSliderInput(session, "x_limit_c", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") )
+                 }
                }) #end observe event  
   
+  #watch state_selector_c to reduce the picker options in the county dropdown limited to those within the selected state(s)
+  observeEvent(input$state_selector_c,
+               {
+                  #redesignate county_dat to match the state selector input
+                   county_dat_sub <- county_dat %>% filter(state %in% input$state_selector_c)
+                   county_var_sub = sort(unique(county_dat_sub$location))
+                   shinyWidgets::updatePickerInput(session, "county_selector", "Select counties", county_var_sub, selected = county_var_sub[1])
+             })
   
 
   ###########################################
@@ -530,15 +730,31 @@ server <- function(input, output, session) {
     {
       outcome = paste(daily_tot,outtype,sep="_") 
     }
+
     
-    #filter data based on user selections
-    #keep all outcomes/variables for now so we can do x-axis adjustment
-    #filtering of only the outcome to plot is done after x-scale adjustment
-    plot_dat <- all_plot_dat %>%   filter(location %in% location_selector) %>%      
+    if (current_tab == "county")
+    {
+      #add an additional line of filtering when using the county tab to prevent double stacking of data from counties that share the same name in multiple states
+      #sort remaining data as done for us and world plots
+      plot_dat <- county_dat %>% filter(state %in% input$state_selector_c) %>%
+                                   filter(location %in% location_selector) %>%      
                                    filter(source %in% source_selector) %>%
                                    group_by(source,location) %>%
                                    arrange(date) %>%
                                    ungroup()
+    }
+    else
+    {
+      #filter data based on user selections
+      #keep all outcomes/variables for now so we can do x-axis adjustment
+      #filtering of only the outcome to plot is done after x-scale adjustment
+      plot_dat <- all_plot_dat %>%   filter(location %in% location_selector) %>%      
+                                     filter(source %in% source_selector) %>%
+                                     group_by(source,location) %>%
+                                     arrange(date) %>%
+                                     ungroup()
+    }
+
     
     #adjust x-axis as needed 
     if (xscale == 'x_count')
@@ -735,6 +951,20 @@ server <- function(input, output, session) {
     return(pl)
   }) #end function making testing plot
 
+  ###########################################
+  #function that makes case/death  for county tab
+  ###########################################
+  output$county_case_death_plot <- renderPlotly({
+    pl <- NULL
+    if (!is.null(input$source_selector_c))
+    {
+      #this plot does not give the option to start at N cases/deaths, seems useless
+      pl <- make_plotly(county_dat, input$county_selector, input$source_selector_c, input$case_death_c, input$daily_tot_c,
+                        "x_time", input$yscale_c, input$absolute_scaled_c, input$x_limit_c, input$current_tab,
+                        input$show_smoother_c, ylabel = 1, outtype = '')
+    }
+    return(pl)
+  }) #end function making case/deaths plot
   
 } #end server function
 
