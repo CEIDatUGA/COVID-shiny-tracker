@@ -301,8 +301,12 @@ get_data <- function()
   #ANSWER: this aggregate is needed here to combine the data for each county in each state. The object created about called us_jhu_total pulls and cleans the JHU data to the county-level however the outcome values need to be summed before creating the state-level dataset. To increase speed I changed the aggregate to a group_by + summarize
   #***************************
   #pull state data and aggregate county values
-  us_jhu_clean <- us_jhu_total %>% select(-FIPS, -county_name) %>% rename(Location = state) %>%
-    group_by(Location, Date, Population_Size) %>% summarise_if(is.numeric, sum, na.rm=TRUE) %>% data.frame()
+  us_jhu_clean <- us_jhu_total %>% 
+                  select(-FIPS, -county_name) %>% 
+                  rename(Location = state) %>%
+                  group_by(Location, Date, Population_Size) %>% 
+                  summarise_if(is.numeric, sum, na.rm=TRUE) %>% 
+                  data.frame()
   
   #add total US values
   all_us <- add_US(us_jhu_clean)
@@ -407,7 +411,10 @@ get_data <- function()
   #********************************
   
   county_dat <- rbind(county_jhu_clean, county_usafct_clean, county_nyt_clean) 
-  county_dat <- county_dat %>% rename(date = Date, location = county_name, populationsize = pop_size)
+  county_dat <- county_dat %>% 
+                rename(date = Date, location = county_name, populationsize = pop_size) %>%
+                mutate_if(is.character, as.factor)  
+  browser()
   
   #reorder columns
   county_dat <- county_dat[c("source","location","state", "populationsize","date","variable","value","state_abr")]
@@ -421,7 +428,7 @@ get_data <- function()
   #combine data in list  
   all_data$us_dat = us_dat
   all_data$world_dat = world_dat
-  all_data$county_dat = county_dat
+  #all_data$county_dat = county_dat
    
   message('Data cleaning done.')
   
