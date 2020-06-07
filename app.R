@@ -1,5 +1,6 @@
 # Load packages
 library(dplyr)
+library(tidyselect)
 library(tidyr)
 library(readr)
 library(here)
@@ -8,7 +9,6 @@ library(shinyWidgets)
 library(ggplot2)
 library(plotly)
 library(RColorBrewer)
-library(tidyselect)
 library(tm)
 
 #prevent shiny from overwriting our error message
@@ -104,7 +104,7 @@ get_data <- function()
 {
   filename = here("data",paste0("clean_data_",Sys.Date(),'.rds')) #if the data file for today is here, load then return from function
   if (file.exists(filename)) {
-     all_data <- readRDS(filename)    
+     all_data <- readRDS(file = filename)    
      return(all_data)  
   }
   #if data file is not here, go through all of the below
@@ -128,6 +128,7 @@ get_data <- function()
   #################################
   # pull state level and testing data from Covidtracking and process
   #################################
+  print('starting COVIDtracking')
   us_ct_data <- read_csv("https://covidtracking.com/api/v1/states/daily.csv")
   us_ct_clean <- us_ct_data %>% dplyr::select(c(date,state,positive,negative,total,hospitalized,death)) %>%
     mutate(date = as.Date(as.character(date),format="%Y%m%d")) %>% 
@@ -165,6 +166,7 @@ get_data <- function()
   #################################
   # pull state level data from NYT and process
   #################################
+  print('starting NYTimes')
   us_nyt_data <- readr::read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv")
   us_nyt_clean <- us_nyt_data %>% dplyr::select(c(date,state,cases,deaths)) %>%
     group_by(state) %>% 
@@ -202,6 +204,7 @@ get_data <- function()
   #################################
   # pull state level data from USAFacts and process
   #################################
+  print('starting USAFacts')
   usafct_case_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_confirmed_usafacts.csv")
   usafct_death_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_deaths_usafacts.csv")
   
@@ -263,6 +266,7 @@ get_data <- function()
   #################################
   # pull US data from JHU github and process
   #################################
+  print('starting JHU')
   us_jhu_cases <- readr::read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv")
   us_jhu_deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv")
   # Clean cases
@@ -329,6 +333,7 @@ get_data <- function()
   #################################
   # pull world data from OWID github and process
   #################################
+  message('starting OWID')
   owid_data <- readr::read_csv("https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/owid-covid-data.csv")
   world_owid_clean <- owid_data %>% dplyr::select(-tests_units, -iso_code, -continent) %>%
     rename(Total_Cases = total_cases, Total_Deaths = total_deaths, Daily_Cases = new_cases, Daily_Deaths = new_deaths, Location = location, Date = date, Daily_Test_All = new_tests, Total_Test_All = total_tests) %>% 
@@ -345,7 +350,10 @@ get_data <- function()
   #################################
   # combine all data 
   #################################
-
+  
+  
+  message('starting state/county data combining')
+  
   # give each US dataset a source label
   us_source_var = c("COVIDTracking","NYTimes","JHU","USAFacts")
   
@@ -359,10 +367,11 @@ get_data <- function()
   us_dat <- dplyr::bind_rows(us_ct_clean, us_nyt_clean, us_jhu_clean, usafct_clean) %>%
             rename(date = Date, location = Location, populationsize = Population_Size)
   
-  
   #reorder columns
   us_dat <- us_dat[c("source","location","populationsize","date","variable","value")]
   
+  
+  message('starting world data combining')
   
   # give each world dataset a source label
   world_source_var = c("JHU", "OWID")
@@ -376,6 +385,8 @@ get_data <- function()
   
   world_dat <- world_dat[c("source","location","populationsize","date","variable","value")]
   
+  message('starting county data combining')
+  
   # give each county dataset a source label
   county_source_var = c("JHU", "USAFacts", "NYTimes")
   
@@ -385,8 +396,16 @@ get_data <- function()
   
   #combine all county data from different sources
   #also do all variable/column names in lowercase
-  county_dat <- dplyr::bind_rows(county_jhu_clean, county_usafct_clean, county_nyt_clean) %>%
-                rename(date = Date, location = county_name, populationsize = pop_size)
+  
+  #********************************
+  #*The various county data frames do not have the right/same structure
+  #* rbind fails. bind_rows somehow worked, but seems to be failing on Linux
+  #* let's get all _clean data frames to look exactly the same, then combine (mabye with rbind)
+  #* maybe that will fix things
+  #********************************
+  
+  county_dat <- rbind(county_jhu_clean, county_usafct_clean, county_nyt_clean) 
+  county_dat <- county_dat %>% rename(date = Date, location = county_name, populationsize = pop_size)
   
   #reorder columns
   county_dat <- county_dat[c("source","location","state", "populationsize","date","variable","value","state_abr")]
@@ -394,7 +413,7 @@ get_data <- function()
   #set negative values to zero
   #Comment out the line below to keep negative values in the data for debugging
   ############################################
-  county_dat$value[county_dat$value <0] <- 0
+  #county_dat$value[county_dat$value < 0] <- 0
   ############################################
   
   #combine data in list  
@@ -402,7 +421,7 @@ get_data <- function()
   all_data$world_dat = world_dat
   all_data$county_dat = county_dat
    
-  print('Data cleaning done.')
+  message('Data cleaning done.')
   
   #save the data
   saveRDS(all_data, filename)    
