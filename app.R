@@ -1,6 +1,5 @@
 # Load packages
 library(dplyr)
-library(tidyselect)
 library(tidyr)
 library(readr)
 library(here)
@@ -9,89 +8,11 @@ library(shinyWidgets)
 library(ggplot2)
 library(plotly)
 library(RColorBrewer)
-library(tm)
+library(tidyselect)
 
 #prevent shiny from overwriting our error message
 #not used right now, using safeError below instead
 #options(shiny.sanitize.errors = FALSE)
-
-#******************************
-#general: let's try to do as much using the tidyverse style/functions as possible
-#if possible get rid of merge() and replace with one of the join_ functions
-#also, gather() is outdated, if possible use pivot_longer
-#instead of rbind and cbind, bind_rows and bind_cols is better
-#*****************************
-
-
-#################################
-# make functions
-#################################
-
-#function to reformat datasets to long format following import cleaning
-to_long <- function(df){
-  long_format <- tidyr::pivot_longer(df, cols = c(-Location, -Population_Size, -Date), names_to = "variable", values_to = "value")
-  return(long_format)
-}
-
-#function to standardize county names from different datasets then merge with the county_popsize data
-clean_counties <- function(df,county_popsize){
-  extract_words <- c(" city", " City", " City and Borough", " Census Area"," County", " Borough",  "Municipality of ", " County and City", " Parish", " Municipality")
-  df$county_name <- tm::removeWords(df$county_name, extract_words)
-  county_complete <- inner_join(df, county_popsize)
-  return(county_complete)
-}
-
-#function to add all US to data
-add_US <- function(df){
-  df_new <- df %>% group_by(Date) %>% 
-                   summarize_if(is.numeric, sum, na.rm=TRUE) %>%
-                   mutate(Location = "US") %>%
-                   mutate(Population_Size = max(Population_Size))
-  return(df_new)
-}
-#function to clean usafacts state-level data (part 1)
-clean_usafacts_p1 <- function(df, state_df){
-  part_one <- df %>% dplyr::group_by(stateFIPS) %>% 
-    summarize_if(is.numeric, sum, na.rm=TRUE) %>%
-    dplyr::select(-countyFIPS) %>% 
-    left_join(state_df)
-  return(part_one)
-}
-
-#function to clean usafacts state-level data (part 2)
-clean_usafacts_p2 <- function(df, us_popsize){
-  part_two <- df %>% mutate(Date = as.Date(Date,format="%m/%d/%y")) %>% 
-    rename(state_abr = State) %>%
-    merge(us_popsize) %>%
-    rename(Location = state, Population_Size = pop_size) %>%
-    select(-c(state_abr))
-  return(part_two)
-}
-
-#function to clean usafacts county-level data
-clean_usafacts_p3 <- function(df){
-  part_three <- df %>% select(-c(countyFIPS, stateFIPS)) %>%
-    rename(Location = State, county_name = `County Name`) %>%
-    dplyr::filter(county_name != "Statewide Unallocated")
-  return(part_three)
-}
-
-#function to partially clean us_jhu data
-clean_us_jhu <- function(df){
-  usjhu <- df %>% filter(iso3 == "USA") %>%
-    dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -Combined_Key)) %>%
-    rename(state = Province_State)
-  return(usjhu)
-}
-
-#function to partially clean world_jhu data
-clean_world_jhu <- function(df, world_popsize){
-  worldjhu <- df %>% dplyr::select(c(-`Province/State`, -Lat, -Long)) %>%
-    rename(country= `Country/Region`) %>%
-    group_by(country) %>% summarise_if(is.numeric, sum, na.rm = TRUE)%>%
-    inner_join(world_popsize)
-  return(worldjhu)
-}
 
 #################################
 # Load all data
@@ -104,258 +25,192 @@ get_data <- function()
 {
   filename = here("data",paste0("clean_data_",Sys.Date(),'.rds')) #if the data file for today is here, load then return from function
   if (file.exists(filename)) {
-     all_data <- readRDS(file = filename)    
+     all_data <- readRDS(filename)    
      return(all_data)  
   }
   #if data file is not here, go through all of the below
   
-  #*******************************
-  #let's get the popsize files standardized 
-  #rename the population size to pop_size in each file
-  #rename Location to state for county_popsize and add state_abr
-  #all variable names lower case
-  #might require a few lines of code adjustment in the cleaning code
-  #******************************
-  
   #data for population size for each state/country so we can compute cases per 100K
-  us_popsize <- readRDS(here("data","us_popsize.rds")) %>% rename(state_abr = state, state = state_full, pop_size = total_pop)
-  world_popsize <-readRDS(here("data","world_popsize.rds"))
-  county_popsize <- readRDS(here("data", "county_popsize.rds"))
+  us_popsize <- readRDS(here("data","us_popsize.rds")) %>% rename(state_abr = state, state = state_full)
+  world_popsize <-readRDS(here("data","world_popsize.rds")) 
   
   all_data = list() #will save and return all datasets as list
   
-   
   #################################
-  # pull state level and testing data from Covidtracking and process
+  # pull data from Covidtracking and process
   #################################
-  print('starting COVIDtracking')
   us_ct_data <- read_csv("https://covidtracking.com/api/v1/states/daily.csv")
   us_ct_clean <- us_ct_data %>% dplyr::select(c(date,state,positive,negative,total,hospitalized,death)) %>%
     mutate(date = as.Date(as.character(date),format="%Y%m%d")) %>% 
-    group_by(state) %>% 
-    arrange(date) %>%
+    group_by(state) %>% arrange(date) %>%
     mutate(Daily_Test_Positive = c(0,diff(positive))) %>% 
     mutate(Daily_Test_Negative = c(0,diff(negative))) %>% 
     mutate(Daily_Test_All = c(0,diff(total))) %>% 
     mutate(Daily_Hospitalized = c(0,diff(hospitalized))) %>% 
-    mutate(Daily_Deaths = c(0,diff(death))) %>% 
-    rename(state_abr = state) %>%
+    mutate(Daily_Deaths = c(0,diff(death))) %>% rename(state_abr = state) %>%
     merge(us_popsize) %>%
-    rename(Date = date, Location = state, Population_Size = pop_size, Total_Deaths = death, 
+    rename(Date = date, Location = state, Population_Size = total_pop, Total_Deaths = death, 
            Total_Cases = positive, Total_Hospitalized = hospitalized, 
            Total_Test_Negative = negative, Total_Test_Positive = positive, Total_Test_All = total) %>%
     mutate(Daily_Cases = Daily_Test_Positive, Total_Cases = Total_Test_Positive) %>%
-    mutate(Daily_Positive_Prop = Daily_Test_Positive / Daily_Test_All) %>%
-    mutate(Total_Positive_Prop = Total_Test_Positive / Total_Test_All) %>%
     select(-c(state_abr,Total_Test_Negative,Daily_Test_Negative))
   
   #add all US by summing over all variables
-  #adding is not right approach for proportion test positive, so need to recompute
-  all_us <- add_US(us_ct_clean) %>%
-            mutate(Daily_Positive_Prop = Daily_Test_Positive / Daily_Test_All) %>%
-            mutate(Total_Positive_Prop = Total_Test_Positive / Total_Test_All) 
-    
-  #combine all US data with rest of data
+  all_us <- us_ct_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+  all_us$Location = "US"
+  all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
   us_ct_clean = rbind(us_ct_clean,all_us)
   
-  #reformat to long
-  us_ct_clean <-  to_long(us_ct_clean)
-  us_ct_clean$value[!is.finite(us_ct_clean$value)] <- NA
-  us_ct_clean <- na.omit(us_ct_clean)
-  
   #################################
-  # pull state level data from NYT and process
+  # pull data from NYT and process
   #################################
-  print('starting NYTimes')
   us_nyt_data <- readr::read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv")
   us_nyt_clean <- us_nyt_data %>% dplyr::select(c(date,state,cases,deaths)) %>%
-    group_by(state) %>% 
-    arrange(date) %>%
+    group_by(state) %>% arrange(date) %>%
     mutate(Daily_Cases = c(0,diff(cases))) %>% 
     mutate(Daily_Deaths = c(0,diff(deaths))) %>%
-    inner_join(us_popsize) %>%
-    rename(Date = date, Location = state, Population_Size = pop_size, Total_Deaths = deaths, Total_Cases = cases)  %>%
-    select(-state_abr) %>%
-    data.frame()
-  
+    merge(us_popsize) %>%
+    rename(Date = date, Location = state, Population_Size = total_pop, Total_Deaths = deaths, 
+           Total_Cases = cases)  %>%
+    select(-state_abr)
+
   #add all US by summing over all variables
-  all_us <- add_US(us_nyt_clean) 
+  all_us <- us_nyt_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+  all_us$Location = "US"
+  all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
   us_nyt_clean = rbind(us_nyt_clean,all_us)
-  #reformat to long
-  us_nyt_clean <- to_long(us_nyt_clean)
 
   #################################
-  # pull county data from NYT and process
+  # pull data from USAFacts and process
   #################################
-  county_nyt_data <- readr::read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
-  county_nyt <- county_nyt_data %>% 
-                select(-fips) %>%
-                group_by(state, county) %>% 
-                arrange(date) %>%
-                      mutate(Daily_Cases = c(0,diff(cases))) %>%
-                      mutate(Daily_Deaths = c(0,diff(deaths))) %>%
-              rename(Location = state, county_name = county, Date = date, Total_Cases = cases, Total_Deaths = deaths) 
-    
-  #standardize county names and add population size
-  county_nyt <- clean_counties(county_nyt, county_popsize)
-  #reformat to long
-  county_nyt_clean <- pivot_longer(county_nyt, cols = c(-Location, -Date, -county_name, -state, -pop_size, -state_abr), names_to = "variable", values_to = "value")%>%
-    ungroup() %>% select(-Location)
-  
-  #################################
-  # pull state level data from USAFacts and process
-  #################################
-  print('starting USAFacts')
   usafct_case_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_confirmed_usafacts.csv")
-  usafct_death_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_deaths_usafacts.csv")
-  
-  state_df = usafct_case_data %>% 
-    distinct(stateFIPS, .keep_all = TRUE) %>% 
-    select(State,stateFIPS)
-  
-  usafct_case_clean <- clean_usafacts_p1(usafct_case_data, state_df) %>%
+  state_df = usafct_case_data %>% distinct(stateFIPS, .keep_all = TRUE) %>% select(3:4)
+  usafct_case_clean <- usafct_case_data %>% 
+                       dplyr::group_by(stateFIPS) %>% 
+                       summarize_if(is.numeric, sum, na.rm=TRUE) %>%
+                       dplyr::select(-countyFIPS) %>% 
+                       left_join(state_df) %>%    
     tidyr::pivot_longer(-State, names_to = "Date", values_to = "Total_Cases") %>%
-    clean_usafacts_p2(us_popsize) %>%
-    group_by(Location) %>% arrange(Date) %>%
-    mutate(Daily_Cases = c(0,diff(Total_Cases)))
+    mutate(Date = as.Date(Date,format="%m/%d/%y")) %>% 
+    group_by(State) %>% arrange(Date) %>%
+    mutate(Daily_Cases = c(0,diff(Total_Cases))) %>% 
+    rename(state_abr = State) %>%
+    merge(us_popsize) %>%
+    rename(Location = state, Population_Size = total_pop) %>%
+    select(-c(state_abr))
   
-  usafct_death_clean <- clean_usafacts_p1(usafct_death_data, state_df) %>%  
+  usafct_death_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_deaths_usafacts.csv")
+  state_df = usafct_death_data %>% distinct(stateFIPS, .keep_all = TRUE) %>% select(3:4)
+  usafct_death_clean <- usafct_death_data %>% 
+    dplyr::group_by(stateFIPS) %>% 
+    summarize_if(is.numeric, sum, na.rm=TRUE) %>%
+    dplyr::select(-countyFIPS) %>% 
+    left_join(state_df) %>%    
     tidyr::pivot_longer(-State, names_to = "Date", values_to = "Total_Deaths") %>%
-    clean_usafacts_p2(us_popsize) %>%
-    group_by(Location) %>% arrange(Date) %>%
-    mutate(Daily_Deaths = c(0,diff(Total_Deaths)))
+    mutate(Date = as.Date(Date,format="%m/%d/%y")) %>% 
+    group_by(State) %>% arrange(Date) %>%
+    mutate(Daily_Deaths = c(0,diff(Total_Deaths))) %>% 
+    rename(state_abr = State) %>%
+    merge(us_popsize) %>%
+    rename(Location = state, Population_Size = total_pop) %>%
+    select(-state_abr, -Population_Size)
   
   usafct_clean <- left_join(usafct_case_clean, usafct_death_clean) %>%
-    group_by(Location) %>% 
-    arrange(Date)  %>%
-    ungroup()
-  
+                  group_by(Location) %>% arrange(Date)  %>%
+                  ungroup() %>%
+                  data.frame()
+    
   #add all US by summing over all variables
-  all_us <- add_US(usafct_clean)
+  all_us <- usafct_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+  all_us$Location = "US"
+  all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
   usafct_clean = rbind(usafct_clean,all_us)
-  #reformat to long
-  usafct_clean <- to_long(usafct_clean)
   
-  #################################
-  # pull county data from USAFacts and process
-  #################################
-  #County data cleaning-cases
-  county_usafct_case <- clean_usafacts_p3(usafct_case_data) %>% 
-    pivot_longer(cols = c(-Location, -county_name), names_to = "Date", values_to = "Total_Cases") %>%
-    mutate(Date = as.Date(Date,format="%m/%d/%y")) %>%
-    group_by(Location, county_name) %>% arrange(Date) %>%
-    mutate(Daily_Cases = c(0,diff(Total_Cases))) 
-  #standardize county names and add population size
-  county_usafct_case_clean <- clean_counties(county_usafct_case, county_popsize)
-  
-  #County data cleaning-deaths
-  county_usafct_death <- clean_usafacts_p3(usafct_death_data) %>%
-    pivot_longer(cols = c(-Location, -county_name), names_to = "Date", values_to = "Total_Deaths") %>%
-    mutate(Date = as.Date(Date,format="%m/%d/%y")) %>%
-    group_by(Location, county_name) %>% arrange(Date) %>%
-    mutate(Daily_Deaths = c(0,diff(Total_Deaths))) 
-  #standardize county names and add population size
-  county_usafct_death_clean <- clean_counties(county_usafct_death, county_popsize)
-  
-  #combine county data
-  county_usafct_clean <- inner_join(county_usafct_case_clean, county_usafct_death_clean)
-  
-  #reformat county to long
-  county_usafct_clean <- pivot_longer(county_usafct_clean, cols = c(-Location, -Date, -county_name, -state, -pop_size, -state_abr), names_to = "variable", values_to = "value")%>%
-    ungroup() %>% select(-Location)
-
   
   #################################
   # pull US data from JHU github and process
   #################################
-  print('starting JHU')
   us_jhu_cases <- readr::read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv")
   us_jhu_deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv")
   # Clean cases
-  us_jhu_cases_clean <- clean_us_jhu(us_jhu_cases) %>%
-    tidyr::pivot_longer(cols = c(-state, -FIPS, -Admin2), names_to = "Date", values_to = "Cases")
+  us_jhu_cases <- us_jhu_cases %>% filter(iso3 == "USA") %>%
+    dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -FIPS, -Admin2, -Combined_Key)) %>%
+    rename(Location = Province_State)
+  us_jhu_cases <- aggregate(. ~ Location, us_jhu_cases, FUN = sum)
+  us_jhu_cases_clean <- gather(us_jhu_cases, Date, Cases, -Location)
   # Clean deaths
-  us_jhu_deaths_clean <-clean_us_jhu(us_jhu_deaths) %>% 
-    tidyr::pivot_longer(cols = c(-state, -FIPS, -Admin2), names_to = "Date", values_to = "Deaths")
-  #combine cases and deaths
-  us_jhu_combined <- inner_join(us_jhu_cases_clean, us_jhu_deaths_clean)
-  us_jhu_total <- inner_join(us_jhu_combined, us_popsize) %>%
-    mutate(Date = as.Date(as.character(Date),format="%m/%d/%y")) %>%
-    group_by(state, Admin2) %>% arrange(Date) %>%
+  us_jhu_deaths <- us_jhu_deaths %>% filter(iso3 == "USA") %>%
+    dplyr::select(c(-Country_Region, -Lat, -Long_, -UID, -iso2, -iso3, -code3, -FIPS, -Admin2, -Combined_Key, -Population)) %>%
+    rename(Location = Province_State)
+  us_jhu_deaths <- aggregate(. ~ Location, us_jhu_deaths, FUN = sum)
+  us_jhu_deaths_clean <- gather(us_jhu_deaths, Date, Deaths, -Location)
+  us_jhu_combined <- merge(us_jhu_cases_clean, us_jhu_deaths_clean)
+  us_jhu_popsize <- us_popsize %>% rename(Location = state)
+  # This merge removes cruise ship cases/death counts
+  us_jhu_merge <- merge(us_jhu_combined, us_jhu_popsize)
+  us_jhu_clean <- us_jhu_merge %>% mutate(Date = as.Date(as.character(Date),format="%m/%d/%y")) %>%
+    group_by(Location) %>% arrange(Date) %>%
     mutate(Daily_Cases = c(0,diff(Cases))) %>%
     mutate(Daily_Deaths = c(0,diff(Deaths))) %>% 
     ungroup() %>%
-    rename(Total_Deaths = Deaths, Total_Cases = Cases, Population_Size = pop_size, county_name = Admin2) %>% 
-    select(-state_abr) 
+    rename(Total_Deaths = Deaths, Total_Cases = Cases, Population_Size = total_pop) %>% 
+    select(-state_abr) %>%
+    data.frame()
   
-  #Use us_jhu_total to create both the county and state level datasets 
-  #Pull county data and reformat to long
-  county_jhu_clean <- us_jhu_total %>% select(-c(Population_Size, FIPS)) %>%
-    pivot_longer(cols = c(-state, -Date, -county_name), names_to = "variable", values_to = "value")
-  
-  #add county population numbers 
-  county_jhu_clean <- inner_join(county_jhu_clean, county_popsize)
-  
-  #***************************
-  #what's the aggregate function doing in the code below?
-  #ANSWER: this aggregate is needed here to combine the data for each county in each state. The object created about called us_jhu_total pulls and cleans the JHU data to the county-level however the outcome values need to be summed before creating the state-level dataset. To increase speed I changed the aggregate to a group_by + summarize
-  #***************************
-  #pull state data and aggregate county values
-  us_jhu_clean <- us_jhu_total %>% select(-FIPS, -county_name) %>% rename(Location = state) %>%
-    group_by(Location, Date, Population_Size) %>% summarise_if(is.numeric, sum, na.rm=TRUE) %>% data.frame()
-  
-  #add total US values
-  all_us <- add_US(us_jhu_clean)
+  #add all US by summing over all variables
+  all_us <- us_jhu_clean %>% group_by(Date) %>% summarize_if(is.numeric, sum, na.rm=TRUE)
+  all_us$Location = "US"
+  all_us$Population_Size = max(all_us$Population_Size) #because of na.rm in sum, pop size only right at end
   us_jhu_clean = rbind(us_jhu_clean,all_us)
-  #reformat state data to long
-  us_jhu_clean <- to_long(us_jhu_clean)
   
+    
   #################################
   # pull world data from JHU github and process
   #################################
   world_cases <- readr::read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv")
   world_deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv")
   # clean the data for plotting
-  world_cases <- clean_world_jhu(world_cases, world_popsize) %>%
-    tidyr::pivot_longer(cols = c(-country, -country_pop), names_to = "date", values_to = "cases")
-  world_deaths <- clean_world_jhu(world_deaths, world_popsize) %>%
-    tidyr::pivot_longer(cols = c(-country, -country_pop), names_to = "date", values_to = "deaths")
-  # join the data
-  world_jhu_clean <- inner_join(world_cases, world_deaths) %>% 
-    mutate(date = as.Date(as.character(date),format="%m/%d/%y")) %>%
+  world_cases <- world_cases %>% dplyr::select(c(-`Province/State`, -Lat, -Long)) %>%
+    rename(country= `Country/Region`)
+  world_cases <- aggregate(. ~ country, world_cases, FUN = sum)
+  world_deaths <- world_deaths %>% dplyr::select(c(-`Province/State`, -Lat, -Long)) %>%
+    rename(country= `Country/Region`)
+  world_deaths <- aggregate(. ~ country, world_deaths, FUN = sum)
+  #Melt case and death data
+  world_cases <- merge(world_popsize, world_cases)
+  melt_cases <- gather(world_cases, date, cases, -country, -country_pop)
+  world_deaths <- merge(world_deaths, world_popsize)
+  melt_deaths <- gather(world_deaths, date, deaths, -country, -country_pop)
+  all_merge <- merge(melt_deaths, melt_cases)
+  world_jhu_clean <- all_merge %>% mutate(date = as.Date(as.character(date),format="%m/%d/%y")) %>%
     group_by(country) %>% arrange(date) %>%
     mutate(Daily_Cases = c(0,diff(cases))) %>%
-    mutate(Daily_Deaths = c(0,diff(deaths))) %>%
+    mutate(Daily_Deaths = c(0,diff(deaths))) %>% 
     ungroup() %>%
-    rename(Date = date, Total_Deaths = deaths, Total_Cases = cases, Location = country, Population_Size = country_pop) 
-  #reformat to long
-  world_jhu_clean <- to_long(world_jhu_clean)
-
+    rename(Date = date, Total_Deaths = deaths, Total_Cases = cases, Location = country, Population_Size = country_pop) %>% 
+    mutate(Location = replace(Location, Location == 'Korea, South','South Korea')) %>%
+    mutate(Location = replace(Location, Location == 'Taiwan*','Taiwan')) %>% #fix a few locations
+    data.frame()
+  
   
   #################################
   # pull world data from OWID github and process
   #################################
-  message('starting OWID')
   owid_data <- readr::read_csv("https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/owid-covid-data.csv")
-  world_owid_clean <- owid_data %>% dplyr::select(-tests_units, -iso_code, -continent) %>%
+  world_owid_clean <- owid_data %>% dplyr::select(-tests_units, -iso_code) %>%
     rename(Total_Cases = total_cases, Total_Deaths = total_deaths, Daily_Cases = new_cases, Daily_Deaths = new_deaths, Location = location, Date = date, Daily_Test_All = new_tests, Total_Test_All = total_tests) %>% 
     mutate(Population_Size = Total_Cases / total_cases_per_million * 1000000) %>% #back-calculate population size
     mutate(Location = recode(Location, "United States" = "US")) %>%
     mutate(Daily_Test_Positive = Daily_Cases ) %>% #assuming new cases means new positive tests
     mutate(Total_Test_Positive = Total_Cases ) %>%
-    mutate(Daily_Positive_Prop = Daily_Test_Positive / Daily_Test_All) %>%
-    mutate(Total_Positive_Prop = Total_Test_Positive / Total_Test_All) %>%
-    select( - contains('thousand'), - contains('million'))
-  #reformat to long
-  world_owid_clean <- to_long(world_owid_clean)
-
+    select( - contains('thousand'), - contains('million')) %>%
+    data.frame()
+ 
+  
   #################################
   # combine all data 
   #################################
-  
-  
-  message('starting state/county data combining')
-  
+
   # give each US dataset a source label
   us_source_var = c("COVIDTracking","NYTimes","JHU","USAFacts")
   
@@ -365,15 +220,8 @@ get_data <- function()
   usafct_clean$source = us_source_var[4]
   
   #combine all US data from different sources
-  #also do all variable/column names in lowercase
-  us_dat <- rbind(us_ct_clean, us_nyt_clean, us_jhu_clean, usafct_clean) 
-  us_dat <- us_dat %>% rename(date = Date, location = Location, populationsize = Population_Size)
+  us_dat <- dplyr::bind_rows(us_ct_clean, us_nyt_clean, us_jhu_clean, usafct_clean) 
   
-  #reorder columns
-  us_dat <- us_dat[c("source","location","populationsize","date","variable","value")]
-  
-  
-  message('starting world data combining')
   
   # give each world dataset a source label
   world_source_var = c("JHU", "OWID")
@@ -382,53 +230,15 @@ get_data <- function()
   world_owid_clean$source = world_source_var[2]
   
   #combine all world data from different sources
-  world_dat <- rbind(world_jhu_clean, world_owid_clean) 
-  world_dat <- world_dat %>% rename(date = Date, location = Location, populationsize = Population_Size)
-  
-  world_dat <- world_dat[c("source","location","populationsize","date","variable","value")]
-  
-  message('starting county data combining')
-  
-  # give each county dataset a source label
-  county_source_var = c("JHU", "USAFacts", "NYTimes")
-  
-  county_jhu_clean$source = county_source_var[1]
-  county_usafct_clean$source = county_source_var[2]
-  county_nyt_clean$source = county_source_var[3]
-  
-  #combine all county data from different sources
-  #also do all variable/column names in lowercase
-  
-  #********************************
-  #*The various county data frames do not have the right/same structure
-  #* rbind fails. bind_rows somehow worked, but seems to be failing on Linux
-  #* let's get all _clean data frames to look exactly the same, then combine (mabye with rbind)
-  #* maybe that will fix things
-  #********************************
-  
-  county_dat <- rbind(county_jhu_clean, county_usafct_clean, county_nyt_clean) 
-  county_dat <- county_dat %>% rename(date = Date, location = county_name, populationsize = pop_size)
-  
-  #reorder columns
-  county_dat <- county_dat[c("source","location","state", "populationsize","date","variable","value","state_abr")]
-  
-  #set negative values to zero
-  #Comment out the line below to keep negative values in the data for debugging
-  ############################################
-  #county_dat$value[county_dat$value < 0] <- 0
-  ############################################
+  world_dat <- dplyr::bind_rows(world_jhu_clean, world_owid_clean)
   
   #combine data in list  
   all_data$us_dat = us_dat
   all_data$world_dat = world_dat
-  all_data$county_dat = county_dat
-   
-  message('Data cleaning done.')
   
   #save the data
   saveRDS(all_data, filename)    
   return(all_data)
-  
   
 } # end the get-data function which pulls data from the various online sources and processes/saves  
 
@@ -446,18 +256,15 @@ all_dat = isolate(all_data())
 # pull data out of list 
 world_dat = all_dat$world_dat 
 us_dat = all_dat$us_dat 
-county_dat = all_dat$county_dat
+
 
 #define variables for location and source selectors
-state_var = sort(unique(us_dat$location))  
-state_var = c("US",state_var[!state_var=="US"]) #move US to front
-country_var = sort(unique(world_dat$location))
-county_var = sort(unique(county_dat$location))
-state_var_county = sort(unique(county_dat$state))
+state_var = unique(us_dat$Location)
+country_var = sort(unique(world_dat$Location))
 
 us_source_var = unique(us_dat$source)
 world_source_var = unique(world_dat$source)
-county_source_var = unique(county_dat$source)
+
 
 #################################
 # Define UI
@@ -466,17 +273,17 @@ ui <- fluidPage(
   tags$head(includeHTML(here("www","google-analytics.html"))), #this is for Google analytics tracking.
   includeCSS(here("www","appstyle.css")),
   #main tabs
-  navbarPage( title = "COVID-19 Tracker", id = 'current_tab', selected = "us", header = "",
-              tabPanel(title = "US States", value = "us",
+  navbarPage( title = "COVID-19 Tracker", id = 'alltabs', selected = "us", header = "",
+              tabPanel(title = "US", value = "us",
                        sidebarLayout(
                          sidebarPanel(
                            shinyWidgets::pickerInput("state_selector", "Select State(s)", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("Georgia","California","Washington") ),
-                           shiny::div("US is at start of state list."),
+                           shiny::div("US is at end of state list."),
                            br(),
-                           shinyWidgets::pickerInput("source_selector", "Select Source(s)", us_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("COVIDTracking") ),
-                           shiny::div("Choose data sources (see 'About' tab for details)."),
-                           br(),
-                           shiny::selectInput( "case_death",   "Outcome",c("Cases" = "Cases", "Hospitalizations" = "Hospitalized", "Deaths" = "Deaths")),
+                           shinyWidgets::pickerInput("us_source_selector", "Select Source(s)", us_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("COVIDTracking") ),
+                          shiny::div("Choose data sources (see 'About' tab for details)."),
+                          br(),
+                          shiny::selectInput( "case_death",   "Outcome",c("Cases" = "Cases", "Hospitalizations" = "Hospitalized", "Deaths" = "Deaths")),
                            shiny::div("Modify the top plot to display cases, hospitalizations, or deaths."),
                            br(),
                            shiny::selectInput("daily_tot", "Daily or cumulative numbers", c("Daily" = "Daily", "Total" = "Total" )),
@@ -489,8 +296,8 @@ ui <- fluidPage(
                            shiny::div("Modify the top two plots to display total counts or values scaled by the state/territory population size."),
                            br(),
                            shiny::selectInput("xscale", "Set x-axis to calendar date or days since a specified total number of cases/hospitalizations/deaths", c("Calendar Date" = "x_time", "Days since N cases/hospitalizations/deaths" = "x_count")),
-                           sliderInput(inputId = "x_limit", "Select a date or outcome value from which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") ),
-                           shiny::div("Modify all three plots to begin at a specified starting date or outcome value designated in the slider above."),
+                           sliderInput(  inputId = "count_limit", "Choose the number of cases/hospitalizations/deaths at which to start graphs", min = 1,  max = 500, value = 10 ),
+                           shiny::div("Modify all three plots to show data with x-axis as calender date or days since a state reported a specified total number of cases/hospitalizations/deaths, specified by the slider above. The slider above does not have an impact for calendar date on the x-axis."),
                            br(),
                            shiny::selectInput(  "yscale", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
                            shiny::div("Modify the top two plots to show data on a linear or logarithmic scale."),
@@ -508,49 +315,12 @@ ui <- fluidPage(
                        ) #end sidebar layout     
               ), #close US tab
               
-           
-              tabPanel( title = "US Counties", value = "county",
-                        sidebarLayout(
-                          sidebarPanel(
-                            #County selector 
-                            shinyWidgets::pickerInput("state_selector_c", "Select state", state_var_county,  multiple = FALSE, options = list(`actions-box` = TRUE), selected = c("Georgia")),
-                            shinyWidgets::pickerInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = county_var[1]),
-                            shinyWidgets::pickerInput("source_selector_c", "Select Source(s)", county_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") ),
-                            shiny::div("Choose data sources (see 'About' tab for details)."),
-                            br(),
-                            shiny::selectInput( "case_death_c", "Outcome", c("Cases" = "Cases", "Deaths" = "Deaths")),
-                            shiny::div("Modify the plot to display cases or deaths."),
-                            br(),
-                            shiny::selectInput("daily_tot_c", "Daily or cumulative numbers", c("Daily" = "Daily", "Total" = "Total")),
-                            shiny::div("Modify the plot to reflect daily or cumulative data."),
-                            br(),
-                            shiny::selectInput("show_smoother_c", "Add trend line", c("No" = "No", "Yes" = "Yes")),
-                            shiny::div("Shows a trend line for cases/hospitalizations/deaths plot."),
-                            br(),
-                            shiny::selectInput("absolute_scaled_c", "Absolute or scaled values", c("Absolute Number" = "actual", "Per 100,000 persons" = "scaled") ),
-                            shiny::div("Modify the plot to display total counts or values scaled by the county population size."),
-                            br(),
-                            sliderInput(inputId = "x_limit_c", "Select a date at which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") ),
-                            br(),
-                            shiny::selectInput(  "yscale_c", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
-                            shiny::div("Modify the plot to show data on a linear or logarithmic scale."),
-                            br()
-                          ), #end sidebar panel
-                          
-                          mainPanel(
-                            #change to plotOutput if using static ggplot object
-                            plotlyOutput(outputId = "county_case_death_plot", height = "500px")
-                          ) #end main panel
-                          
-                        ), #close sidebar layout
-              ), #close county tab
-              
               tabPanel( title = "World", value = "world",
                         sidebarLayout(
                           sidebarPanel(
                             #Country selector coding with US, Italy, and Spain as always selected for a defult setting, will flash an error with none selected
-                            shinyWidgets::pickerInput("country_selector", "Select countries", country_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("US", "United Kingdom", "Germany")),
-                            shinyWidgets::pickerInput("source_selector_w", "Select Source(s)", world_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") ),
+                            shinyWidgets::pickerInput("country_selector", "Select countries", country_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("US", "Italy", "Spain")                        ),
+                            shinyWidgets::pickerInput("world_source_selector", "Select Source(s)", world_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") ),
                             shiny::div("Choose data sources (see 'About' tab for details)."),
                             br(),
                             shiny::selectInput( "case_death_w", "Outcome", c("Cases" = "Cases", "Deaths" = "Deaths")),
@@ -559,15 +329,15 @@ ui <- fluidPage(
                             shiny::selectInput("daily_tot_w", "Daily or cumulative numbers", c("Daily" = "Daily", "Total" = "Total")),
                             shiny::div("Modify the plot to reflect daily or cumulative data."),
                             br(),
-                            shiny::selectInput("show_smoother_w", "Add trend line", c("No" = "No", "Yes" = "Yes")),
+                            shiny::selectInput("show_smoother_world", "Add trend line", c("No" = "No", "Yes" = "Yes")),
                             shiny::div("Shows a trend line for cases/hospitalizations/deaths plot."),
                             br(),
                             shiny::selectInput("absolute_scaled_w", "Absolute or scaled values", c("Absolute Number" = "actual", "Per 100,000 persons" = "scaled") ),
                             shiny::div("Modify the plot to display total counts or values scaled by the country population size."),
                             br(),
                             shiny::selectInput("xscale_w", "Set x-axis to calendar date or days since a specified total number of cases/deaths", c("Calendar Date" = "x_time", "Days since N cases/hospitalizations/deaths" = "x_count")),
-                            sliderInput(inputId = "x_limit_w", "Select a date or outcome value from which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") ),
-                            shiny::div("Modify all three plots to begin at a specified starting date or outcome value designated in the slider above."),
+                            sliderInput(  inputId = "count_limit_w", "Choose the number of cases/deaths at which to start graphs", min = 1,  max = 500, value = 10 ),
+                            shiny::div("Modify all the plot to show data with x-axis as calender date or days since a country reported a specified total number of cases/deaths, specified by the slider above. The slider above does not have an impact for calendar date on the x-axis."),
                             br(),
                             shiny::selectInput(  "yscale_w", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
                             shiny::div("Modify the plot to show data on a linear or logarithmic scale."),
@@ -585,6 +355,7 @@ ui <- fluidPage(
                           
                         ), #close sidebar layout
               ), #close world tab
+              
               
               tabPanel( title = "About", value = "about",
                         tagList(    
@@ -611,7 +382,7 @@ ui <- fluidPage(
                             ),# and tag
                             tags$div(
                               id = "bigtext",
-                              "We currently include 4 different data sources for US states.", 
+                              "We currently include 4 different data sources for the US.", 
                               a("The Covid Tracking Project",  href = "https://covidtracking.com/", target = "_blank" ),
                               "data source reports all and positive tests, hospitalizations (some states) and deaths. We interpret positive tests as corresponding to new cases. The",
                               a("New York Times (NYT),", href = "https://github.com/nytimes/covid-19-data", target = "_blank" ),
@@ -619,10 +390,6 @@ ui <- fluidPage(
                               "and",
                               a("Johns Hopkins University Center for Systems Science and Engineering (JHU)", href = "https://github.com/CSSEGISandData/COVID-19", target = "_blank" ),
                               "sources report cases and deaths."
-                              ), 
-                            tags$div(
-                              id = "bigtext",
-                              "Three of these sources, JHU, NY Times and USA Facts, also provide data on the county level, those are included in the county tab."         
                               ), 
                             tags$div(
                               id = "bigtext",
@@ -681,131 +448,29 @@ ui <- fluidPage(
 ###########################################
 server <- function(input, output, session) {
 
-  #watch the choice for the x-scale and choose what to show underneath accordingly
-  observeEvent(input$xscale,
-               {
-                 if (input$xscale == 'x_count')
-                 {
-                   #Add a reactive range to slider
-                   shiny::updateSliderInput(session, "x_limit", min = 1,  max = 500, step = 10, value = 1 )
-                 } else
-                 {
-                   shiny::updateSliderInput(session, "x_limit", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") )
-                 }
-               }) #end observe event  
+ 
   
-  #watch the choice for the x-scale and choose what to show underneath accordingly
-  observeEvent(input$xscale_w,
-               {
-                 if (input$xscale_w == 'x_count')
-                 {
-                   #Add a reactive range to slider
-                   shiny::updateSliderInput(session, "x_limit_w", min = 1,  max = 500, step = 10, value = 1 )
-                 } else
-                 {
-                   shiny::updateSliderInput(session, "x_limit_w", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") )
-                 }
-               }) #end observe event 
-  
-  #watch the choice for the x-scale and choose what to show underneath accordingly
-  observeEvent(input$xscale_c,
-               {
-                 if (input$xscale_c == 'x_count')
-                 {
-                   #Add a reactive range to slider
-                   shiny::updateSliderInput(session, "x_limit_c", min = 1,  max = 500, step = 10, value = 1 )
-                 } else
-                 {
-                   shiny::updateSliderInput(session, "x_limit_c", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") )
-                 }
-               }) #end observe event  
-  
-  #watch state_selector_c to reduce the picker options in the county dropdown limited to those within the selected state(s)
-  observeEvent(input$state_selector_c,
-               {
-                  #redesignate county_dat to match the state selector input
-                   county_dat_sub <- county_dat %>% filter(state %in% input$state_selector_c)
-                   county_var_sub = sort(unique(county_dat_sub$location))
-                   shinyWidgets::updatePickerInput(session, "county_selector", "Select counties", county_var_sub, selected = county_var_sub[1])
-             })
-  
-
   ###########################################
-  # function that takes data generated by above function and makes plots
-  # uses plotly
+  # function that takes UI settings and produces data for each plot
   ###########################################
-  make_plotly <- function(all_plot_dat, location_selector, source_selector,case_death, daily_tot,
-                              xscale, yscale, absolute_scaled, x_limit, current_tab,  
-                              show_smoother, ylabel, outtype)
+  set_outcome <- function(all_plot_dat,case_death,daily_tot,absolute_scaled,xscale,count_limit,selected_tab,location_selector,source_selector)
   {
-
-    #outcome to plot/process for non-test
-    outcome = paste(daily_tot,case_death,sep='_') #make string from UI inputs that correspond with variable names
     
-    if (outtype == "Test_All") 
-    {
-      outcome = paste(daily_tot,outtype,sep="_")
-    }
-    if (outtype == "Positive_Prop") 
-    {
-      outcome = paste(daily_tot,outtype,sep="_") 
-    }
+    out_type = paste(daily_tot,case_death,sep='_') #make string from UI inputs that correspond with variable names
+    plot_dat <- all_plot_dat %>%   filter(Location %in% location_selector) %>%      #Only process data for locations that are  selected
+                               filter(source %in% source_selector) %>%
+                                mutate(outcome = get(out_type)) #pick output based on variable name created from UI
+    # do testing data for US
 
-    
-    if (current_tab == "county")
+    if ( ('COVIDTracking' %in% source_selector) || ('OWID' %in% source_selector) )  
     {
-      #add an additional line of filtering when using the county tab to prevent double stacking of data from counties that share the same name in multiple states
-      #sort remaining data as done for us and world plots
-      plot_dat <- county_dat %>% filter(state %in% input$state_selector_c) %>%
-                                   filter(location %in% location_selector) %>%      
-                                   filter(source %in% source_selector) %>%
-                                   group_by(source,location) %>%
-                                   arrange(date) %>%
-                                   ungroup()
-    }
-    else
-    {
-      #filter data based on user selections
-      #keep all outcomes/variables for now so we can do x-axis adjustment
-      #filtering of only the outcome to plot is done after x-scale adjustment
-      plot_dat <- all_plot_dat %>%   filter(location %in% location_selector) %>%      
-                                     filter(source %in% source_selector) %>%
-                                     group_by(source,location) %>%
-                                     arrange(date) %>%
-                                     ungroup()
-    }
-
-    
-    #adjust x-axis as needed 
-    if (xscale == 'x_count')
-    {
-      #filter by count limit
-      out_type2 = paste0("Total_",case_death) #make string from UI inputs that correspond to total and selected outcome
-      start_dates <- plot_dat %>% 
-        filter(variable == out_type2) %>% #get the quantity (cases/hosp/death) which is used to define start
-        filter( value >= x_limit) %>% #remove all values that are below threshold
-        group_by(source,location) %>%   #group by states
-        summarize(start_date = first(date))   #get first date for each state after filtering. for this to work right, the data needs to be sorted by date for each source/location combination
       
-      plot_dat <-  plot_dat %>% left_join(start_dates, by = c("source", "location")) %>% #add start dates to data
-                   filter(variable %in% outcome) %>% #retain only outcome variable
-                   filter(date >= start_date)  %>%      
-                   mutate(time = as.numeric(date)) %>%
-                   group_by(source, location) %>% 
-                   mutate(time = time - min(time)) %>%
-                   ungroup()
+      test_out_type = paste(daily_tot,'Test_All',sep='_')
+      test_pos_type = paste(daily_tot,'Test_Positive',sep='_')
+      plot_dat <- plot_dat %>% mutate(test_outcome = get(test_out_type)) 
+      plot_dat <- plot_dat %>% mutate(test_frac_outcome = get(test_pos_type)/get(test_out_type))
     }
-    else
-    {
-      #filter by date limit
-      plot_dat <- plot_dat %>% mutate(time = date) %>%
-                  filter(variable %in% outcome) %>%
-                  filter(date >= x_limit) 
-    }
-    
-     
-    
-    
+ 
     #set labels and tool tips based on input - entries 2 and 3 are ignored for world plot
     y_labels <- c("Cases", "Tests", "Positive Test Proportion")
     y_labels[1] <- case_death #fill that automatically with either Case/Hosp/Death
@@ -816,84 +481,134 @@ server <- function(input, output, session) {
     
        
     #if we want scaling by 100K, do extra scaling 
-    # don't apply to test proportion
-    if ((absolute_scaled == 'scaled') && (outtype != "Positive_Prop"))
+    if (absolute_scaled == 'scaled')
     {
-      plot_dat <- plot_dat %>% mutate(value = value / populationsize * 100000) 
+      plot_dat <- plot_dat %>% mutate(outcome = outcome / Population_Size * 100000) 
       y_labels[1] <- paste0(y_labels[1], " per 100K")
       y_labels[2] <- paste0(y_labels[2], " per 100K")
+    
+      if ( ('COVIDTracking' %in% source_selector) || ('OWID' %in% source_selector) )  
+      {
+          plot_dat <- plot_dat %>%  mutate(test_outcome = test_outcome / Population_Size * 100000)
+      }
     } #end scaling function
      
+    #adjust data to align for plotting by cases on x-axis. 
+    if (xscale == 'x_count')
+    {
+      #Takes plot_dat and filters counts by the predetermined count limit from the reactive above
+      #Created the time variable (which represents the day number of the outbreak) from the date variable
+      #Will plot the number of days since the selected count_limit or the date
+      
+      out_type2 = paste0("Total_",case_death) #make string from UI inputs that correspond to total and selected outcome
+      plot_dat <- plot_dat %>% 
+        filter(get(out_type2) >= count_limit) %>%  
+        mutate(Time = as.numeric(Date)) %>%
+        group_by(Location) %>% 
+        mutate(Time = Time - min(Time))
+      
+    }
+    else
+    {
+      plot_dat <- plot_dat %>% mutate(Time = Date)
+    }
+    #sort dates for plotting
+    plot_dat <- plot_dat %>% group_by(Location) %>% arrange(Time) %>% ungroup()
     
-
-    p_dat <- plot_dat
-    #the US test plots can only be created using the COVIDtracking data
-    if (current_tab == "us" && (outtype == "Test_All" || outtype == "Positive_Prop")) 
+    list(plot_dat, y_labels, tool_tip) #return list
+  } #end function that produces output for plots
+  
+  ###########################################
+  # function that takes data generated by above function and makes plots
+  # uses plotly
+  ###########################################
+  make_plotly <- function(plot_list, location_selector, yscale, xscale, ylabel, outname, selected_tab, show_smoother)
+  {
+    tool_tip <- plot_list[[3]]
+    plot_dat <- data.frame(plot_list[[1]]) #need the extra data frame conversion from tibble to get tooltip_text line to work
+    linesize = 1.5
+    
+    p_dat <- plot_dat 
+    if (selected_tab == "us" && (outname == 'test_outcome' || outname == 'test_frac_outcome'))
     {
       p_dat <- plot_dat %>% filter(source == "COVIDTracking")
       
     }
-    #the world test plots can only be created using the OWID data
-    if (current_tab == "world" && (outtype == "Test_All" || outtype == "Positive_Prop"))
+    if (selected_tab == "world" && (outname == 'test_outcome' || outname == 'test_frac_outcome'))
     {
       p_dat <- plot_dat %>% filter(source == "OWID")
+      
     }
-       
-    linesize = 1.5
-    ncols = max(3,length(unique(p_dat$location))) #number of colors for plotting
     
-    # create text to show in hover-over tooltip
-    tooltip_text = paste(paste0("Location: ", p_dat$location), 
-                         paste0(tool_tip[1], ": ", p_dat$date), 
-                         paste0(tool_tip[ylabel+1],": ", outcome, sep ="\n")) 
+    #fit <- loess(apple_data$raw_value ~ apple_data$time, degree=1, span = 0.3, data=apple_data)
+    #apple_data <- apple_data %>%    mutate(rel_beta_change = fit$fitted)
     
-    # make plot
+    ncols = max(3,length(unique(p_dat$Location)))
+    tooltip_text = paste(paste0("Location: ", p_dat$Location), 
+                         paste0(tool_tip[1], ": ", p_dat$Date), 
+                         paste0(tool_tip[ylabel+1],": ", p_dat[,outname]), sep ="\n") 
     pl <- plotly::plot_ly(p_dat) %>% 
-          plotly::add_trace(x = ~time, y = ~value, type = 'scatter', 
+          plotly::add_trace(x = ~Time, y = ~get(outname), type = 'scatter', 
                                  mode = 'lines+markers', 
-                                 linetype = ~source, symbol = ~location,
+                                 linetype = ~source, symbol = ~Location,
                                  line = list(width = linesize), text = tooltip_text, 
-                                 color = ~location, colors = brewer.pal(ncols, "Dark2")) %>%
-                          layout(yaxis = list(title=y_labels[ylabel], type = yscale, size = 18)) %>%
-                          layout(legend = list(orientation = "h", x = 0.2, y = -0.3))
+                                 color = ~Location, colors = brewer.pal(ncols, "Dark2")) %>%
+                                 layout(yaxis = list(title=plot_list[[2]][ylabel], type = yscale, size = 18)) 
 
-    # if requested by user, apply and show a smoothing function 
-    if (show_smoother == "Yes")
-    #if (outname == "outcome" && show_smoother == "Yes")
+    # if requested by user, apply and show a smoothing function for case/hosp/death data
+    # currently working for cases but creates error messages for rest
+    if (outname == "outcome" && show_smoother == "Yes")
     {
-      if (any(location_selector %in% p_dat$location))
+      
+      if (any(location_selector %in% p_dat$Location))
       {
-        p_dat2 <- p_dat  %>% select(location,source,value,time) %>% drop_na() %>%
-          group_by(location) %>%
+        p_dat2 <- p_dat  %>% select(Location,source,outcome,Time)%>% drop_na() %>%
+          group_by(Location) %>%
           filter(n() >= 2) %>%  
-          mutate(smoother = loess(value ~ as.numeric(time), span = .4)$fitted) %>%    
+          mutate(smoother = loess(outcome ~ as.numeric(Time), span = .4)$fitted) %>%    
           ungroup()
         
-        pl <- pl %>% plotly::add_lines(x = ~time, y = ~smoother, 
-                                       color = ~location, data = p_dat2, 
+        
+        pl <- pl %>% plotly::add_lines(x = ~Time, y = ~smoother, 
+                                       color = ~Location, data = p_dat2, 
                                        line = list( width = 2*linesize),
                                        opacity=0.3,
                                        showlegend = FALSE) 
-     }
-     else
-     {
-        stop(safeError("Please select a different data source or location. The selected location(s) is not present in the chosen source"))
-     }
-    } #end smoother if statement
+      }
+      else
+      {
+
+      stop(safeError("Please select a different data source or location. The selected location(s) is not present in the chosen source"))
+      
+      }
+
+    }
     return(pl)
   }
+  
+  ###########################################
+  #function that preps data for US tab
+  ###########################################
+  plot_dat_us <- reactive({
+    set_outcome(us_dat,input$case_death,input$daily_tot,input$absolute_scaled,input$xscale,input$count_limit,input$alltabs,input$state_selector,input$us_source_selector)
+  })
+  
+  ###########################################
+  #function that preps data for world tab
+  ###########################################
+  plot_dat_world <- reactive({
+    set_outcome(world_dat,input$case_death_w,input$daily_tot_w,input$absolute_scaled_w,input$xscale_w,input$count_limit_w,input$alltabs,input$country_selector,input$world_source_selector)
+  })
   
   ###########################################
   #function that makes case/death plot for US tab
   ###########################################
   output$case_death_plot <- renderPlotly({
     pl <- NULL
-    if (!is.null(input$source_selector))
+    if (!is.null(input$us_source_selector))
     {
     #create plot
-    pl <- make_plotly(us_dat, input$state_selector, input$source_selector, input$case_death, input$daily_tot,
-                              input$xscale, input$yscale, input$absolute_scaled, input$x_limit, input$current_tab,
-                              input$show_smoother, ylabel = 1, outtype = '')
+    pl <- make_plotly(plot_dat_us(), location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 1, outname = 'outcome',selected_tab = input$alltabs, show_smoother = input$show_smoother)
     }
     return(pl)
   }) #end function making case/deaths plot
@@ -903,11 +618,10 @@ server <- function(input, output, session) {
   ###########################################
   output$testing_plot <- renderPlotly({
     pl <- NULL
-    if ('COVIDTracking' %in% input$source_selector)
+    if ('COVIDTracking' %in% input$us_source_selector)
     {
-      pl <- make_plotly(us_dat, input$state_selector, input$source_selector, input$case_death, input$daily_tot,
-                        input$xscale, input$yscale, input$absolute_scaled, input$x_limit, input$current_tab,
-                        input$show_smoother, ylabel = 2, outtype = 'Test_All')
+      #create plot
+    pl <- make_plotly(plot_dat_us(), location_selector = input$state_selector, yscale = input$yscale, xscale = input$xscale, ylabel = 2, outname = 'test_outcome',selected_tab = input$alltabs, show_smoother = "no")
     }
     return(pl)
   }) #end function making testing plot
@@ -917,12 +631,10 @@ server <- function(input, output, session) {
   ###########################################
   output$testing_frac_plot <- renderPlotly({
       pl <- NULL
-      if ('COVIDTracking' %in% input$source_selector)
+      if ('COVIDTracking' %in% input$us_source_selector)
       {
-        pl <- make_plotly(us_dat, input$state_selector, input$source_selector, input$case_death, input$daily_tot,
-                          input$xscale, input$yscale, input$absolute_scaled, input$x_limit, input$current_tab,
-                          input$show_smoother, ylabel = 3, outtype = 'Positive_Prop')
-        
+        #create plot
+        pl <- make_plotly(plot_dat_us(), location_selector = input$state_selector, yscale = "identity", xscale = input$xscale, ylabel = 3, outname = 'test_frac_outcome',selected_tab = input$alltabs, show_smoother = "no")
       }
       return(pl)
       }) #end function making testing plot
@@ -932,11 +644,10 @@ server <- function(input, output, session) {
   ###########################################
   output$world_case_death_plot <- renderPlotly({
     pl <- NULL
-    if (!is.null(input$source_selector_w))
+    if (!is.null(input$world_source_selector))
     {
-      pl <- make_plotly(world_dat, input$country_selector, input$source_selector_w, input$case_death_w, input$daily_tot_w,
-                        input$xscale_w, input$yscale_w, input$absolute_scaled_w, input$x_limit_w, input$current_tab,
-                        input$show_smoother_w, ylabel = 1, outtype = '')
+      #create plot
+      pl <- make_plotly(plot_dat_world(), location_selector = input$country_selector, yscale = input$yscale_w, xscale = input$xscale_w, ylabel = 1, outname = 'outcome', selected_tab = input$alltabs, show_smoother = input$show_smoother_world)
     }
     return(pl)
   }) #end function making case/deaths plot
@@ -946,12 +657,10 @@ server <- function(input, output, session) {
   ###########################################
   output$world_testing_plot <- renderPlotly({
     pl <- NULL
-    if ('OWID' %in% input$source_selector_w)
+    if ('OWID' %in% input$world_source_selector)
     {
       #create plot
-      pl <- make_plotly(world_dat, input$country_selector, input$source_selector_w, input$case_death_w, input$daily_tot_w,
-                        input$xscale_w, input$yscale_w, input$absolute_scaled_w, input$x_limit_w, input$current_tab,
-                        input$show_smoother_w, ylabel = 2, outtype = 'Test_All')
+      pl <- make_plotly(plot_dat_world(), location_selector = input$country_selector, yscale = input$yscale_w, xscale = input$xscale_w, ylabel = 2, outname = 'test_outcome', selected_tab = input$alltabs, show_smoother = "no")
     }
     return(pl)
   }) #end function making testing plot
@@ -962,29 +671,14 @@ server <- function(input, output, session) {
   ###########################################
   output$world_testing_frac_plot <- renderPlotly({
     pl <- NULL
-    if ('OWID' %in% input$source_selector_w)
+    if ('OWID' %in% input$world_source_selector)
     {
-      pl <- make_plotly(world_dat, input$country_selector, input$source_selector_w, input$case_death_w, input$daily_tot_w,
-                        input$xscale_w, input$yscale_w, input$absolute_scaled_w, input$x_limit_w, input$current_tab,
-                        input$show_smoother_w, ylabel = 3, outtype = 'Positive_Prop')
+      #create plot
+      pl <- make_plotly(plot_dat_world(), location_selector = input$country_selector, yscale = "identity", xscale = input$xscale_w, ylabel = 3, outname = 'test_frac_outcome', selected_tab = input$alltabs, show_smoother = "no")
     }
     return(pl)
   }) #end function making testing plot
 
-  ###########################################
-  #function that makes case/death  for county tab
-  ###########################################
-  output$county_case_death_plot <- renderPlotly({
-    pl <- NULL
-    if (!is.null(input$source_selector_c))
-    {
-      #this plot does not give the option to start at N cases/deaths, seems useless
-      pl <- make_plotly(county_dat, input$county_selector, input$source_selector_c, input$case_death_c, input$daily_tot_c,
-                        "x_time", input$yscale_c, input$absolute_scaled_c, input$x_limit_c, input$current_tab,
-                        input$show_smoother_c, ylabel = 1, outtype = '')
-    }
-    return(pl)
-  }) #end function making case/deaths plot
   
 } #end server function
 
