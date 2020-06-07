@@ -366,8 +366,8 @@ get_data <- function()
   
   #combine all US data from different sources
   #also do all variable/column names in lowercase
-  us_dat <- dplyr::bind_rows(us_ct_clean, us_nyt_clean, us_jhu_clean, usafct_clean) %>%
-            rename(date = Date, location = Location, populationsize = Population_Size)
+  us_dat <- rbind(us_ct_clean, us_nyt_clean, us_jhu_clean, usafct_clean) 
+  us_dat <- us_dat %>% rename(date = Date, location = Location, populationsize = Population_Size)
   
   #reorder columns
   us_dat <- us_dat[c("source","location","populationsize","date","variable","value")]
@@ -382,8 +382,8 @@ get_data <- function()
   world_owid_clean$source = world_source_var[2]
   
   #combine all world data from different sources
-  world_dat <- dplyr::bind_rows(world_jhu_clean, world_owid_clean) %>%
-               rename(date = Date, location = Location, populationsize = Population_Size)
+  world_dat <- rbind(world_jhu_clean, world_owid_clean) 
+  world_dat <- world_dat %>% rename(date = Date, location = Location, populationsize = Population_Size)
   
   world_dat <- world_dat[c("source","location","populationsize","date","variable","value")]
   
