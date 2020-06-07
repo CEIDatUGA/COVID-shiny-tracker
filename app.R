@@ -199,7 +199,8 @@ get_data <- function()
   #standardize county names and add population size
   county_nyt <- clean_counties(county_nyt, county_popsize)
   #reformat to long
-  county_nyt_clean <- pivot_longer(county_nyt, cols = c(-Location, -Date, -county_name, -state, -pop_size, -state_abr), names_to = "variable", values_to = "value")
+  county_nyt_clean <- pivot_longer(county_nyt, cols = c(-Location, -Date, -county_name, -state, -pop_size, -state_abr), names_to = "variable", values_to = "value")%>%
+    ungroup() %>% select(-Location)
   
   #################################
   # pull state level data from USAFacts and process
@@ -260,7 +261,8 @@ get_data <- function()
   county_usafct_clean <- inner_join(county_usafct_case_clean, county_usafct_death_clean)
   
   #reformat county to long
-  county_usafct_clean <- pivot_longer(county_usafct_clean, cols = c(-Location, -Date, -county_name, -state, -pop_size, -state_abr), names_to = "variable", values_to = "value")
+  county_usafct_clean <- pivot_longer(county_usafct_clean, cols = c(-Location, -Date, -county_name, -state, -pop_size, -state_abr), names_to = "variable", values_to = "value")%>%
+    ungroup() %>% select(-Location)
 
   
   #################################
