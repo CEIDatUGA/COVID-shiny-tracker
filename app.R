@@ -358,14 +358,16 @@ get_data <- function()
   #set negative values to zero
   #Comment out the line below to keep negative values in the data for debugging
   ############################################
-  #county_dat$value[county_dat$value < 0] <- 0
+  us_dat$value[us_dat$value < 0] <- 0
+  world_dat$value[world_dat$value < 0] <- 0
+  county_dat$value[county_dat$value < 0] <- 0
   ############################################
   
   #combine data in list  
   all_data$us_dat = us_dat
   all_data$world_dat = world_dat
   all_data$county_dat = county_dat
-   
+  
   message('Data cleaning done.')
   
   #save the data
