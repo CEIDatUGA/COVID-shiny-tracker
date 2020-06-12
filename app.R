@@ -15,14 +15,6 @@ library(tm)
 #not used right now, using safeError below instead
 #options(shiny.sanitize.errors = FALSE)
 
-#******************************
-#general: let's try to do as much using the tidyverse style/functions as possible
-#if possible get rid of merge() and replace with one of the join_ functions
-#also, gather() is outdated, if possible use pivot_longer
-#instead of rbind and cbind, bind_rows and bind_cols is better
-#*****************************
-
-
 #################################
 # make functions
 #################################
