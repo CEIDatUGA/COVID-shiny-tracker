@@ -384,7 +384,8 @@ server <- function(input, output, session) {
   
   #read data is reactive, doesn't work for rest below 
   all_dat = isolate(all_data())
-
+  #all_dat = all_data
+  
   # pull data out of list 
   world_dat = all_dat$world_dat 
   us_dat = all_dat$us_dat 
@@ -401,7 +402,30 @@ server <- function(input, output, session) {
   world_source_var = unique(world_dat$source)
   county_source_var = unique(county_dat$source)
   
+  ################################################################################################
+  #create the following UI elements on server and then add to UI sincc they depend on the variables above 
+  #those variables are only defined on server
+  ################################################################################################
+  output$state_selector = renderUI({
+    shinyWidgets::pickerInput("state_selector", "Select State(s)", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("Georgia","California","Washington") )
+  })
+  output$source_selector = renderUI({
+    shinyWidgets::pickerInput("source_selector", "Select Source(s)", us_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("COVIDTracking") )
+  })
+  output$state_selector_c = renderUI({
+                      shinyWidgets::pickerInput("state_selector_c", "Select state", state_var_county,  multiple = FALSE, options = list(`actions-box` = TRUE), selected = c("Georgia"))
+  })
+  output$county_selector = renderUI({
+     shinyWidgets::pickerInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = county_var[1])
+  })
+  output$country_selector = renderUI({
+      shinyWidgets::pickerInput("country_selector", "Select countries", country_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("US", "United Kingdom", "Germany"))
+  })
+  output$source_selector_w = renderUI({
+     shinyWidgets::pickerInput("source_selector_w", "Select Source(s)", world_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") )
+  })
   
+      
   #watch the choice for the x-scale and choose what to show underneath accordingly
   observeEvent(input$xscale,
                {
@@ -722,10 +746,10 @@ ui <- fluidPage(
               tabPanel(title = "US States", value = "us",
                        sidebarLayout(
                          sidebarPanel(
-                           shinyWidgets::pickerInput("state_selector", "Select State(s)", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("Georgia","California","Washington") ),
+                           uiOutput('state_selector'),
                            shiny::div("US is at start of state list."),
                            br(),
-                           shinyWidgets::pickerInput("source_selector", "Select Source(s)", us_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("COVIDTracking") ),
+                           uiOutput('source_selector'),
                            shiny::div("Choose data sources (see 'About' tab for details)."),
                            br(),
                            shiny::selectInput( "case_death",   "Outcome",c("Cases" = "Cases", "Hospitalizations" = "Hospitalized", "Deaths" = "Deaths")),
@@ -741,7 +765,7 @@ ui <- fluidPage(
                            shiny::div("Modify the top two plots to display total counts or values scaled by the state/territory population size."),
                            br(),
                            shiny::selectInput("xscale", "Set x-axis to calendar date or days since a specified total number of cases/hospitalizations/deaths", c("Calendar Date" = "x_time", "Days since N cases/hospitalizations/deaths" = "x_count")),
-                           sliderInput(inputId = "x_limit", "Select a date or outcome value from which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") ),
+                           sliderInput(inputId = "x_limit", "Select a date or outcome value from which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-03-01","%Y-%m-%d") ),
                            shiny::div("Modify all three plots to begin at a specified starting date or outcome value designated in the slider above."),
                            br(),
                            shiny::selectInput(  "yscale", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
@@ -765,11 +789,8 @@ ui <- fluidPage(
                         sidebarLayout(
                           sidebarPanel(
                             #County selector 
-                            shinyWidgets::pickerInput("state_selector_c", "Select state", state_var_county,  multiple = FALSE, options = list(`actions-box` = TRUE), selected = c("Georgia")),
-                            shinyWidgets::pickerInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = county_var[1]),
-                            #shinyWidgets::pickerInput("source_selector_c", "Select Source(s)", county_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") ),
-                            #shiny::div("Choose data sources (see 'About' tab for details)."),
-                            #br(),
+                            uiOutput('state_selector_c'),
+                            uiOutput('county_selector'),
                             shiny::selectInput( "case_death_c", "Outcome", c("Cases" = "Cases", "Deaths" = "Deaths")),
                             shiny::div("Modify the plot to display cases or deaths."),
                             br(),
@@ -782,7 +803,7 @@ ui <- fluidPage(
                             shiny::selectInput("absolute_scaled_c", "Absolute or scaled values", c("Absolute Number" = "actual", "Per 100,000 persons" = "scaled") ),
                             shiny::div("Modify the plot to display total counts or values scaled by the county population size."),
                             br(),
-                            sliderInput(inputId = "x_limit_c", "Select a date at which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") ),
+                            sliderInput(inputId = "x_limit_c", "Select a date at which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-03-01","%Y-%m-%d") ),
                             br(),
                             shiny::selectInput(  "yscale_c", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
                             shiny::div("Modify the plot to show data on a linear or logarithmic scale."),
@@ -800,9 +821,8 @@ ui <- fluidPage(
               tabPanel( title = "World", value = "world",
                         sidebarLayout(
                           sidebarPanel(
-                            #Country selector coding with US, Italy, and Spain as always selected for a defult setting, will flash an error with none selected
-                            shinyWidgets::pickerInput("country_selector", "Select countries", country_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("US", "United Kingdom", "Germany")),
-                            shinyWidgets::pickerInput("source_selector_w", "Select Source(s)", world_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") ),
+                            uiOutput('country_selector'),
+                            uiOutput('source_selector_w'),
                             shiny::div("Choose data sources (see 'About' tab for details)."),
                             br(),
                             shiny::selectInput( "case_death_w", "Outcome", c("Cases" = "Cases", "Deaths" = "Deaths")),
@@ -818,7 +838,7 @@ ui <- fluidPage(
                             shiny::div("Modify the plot to display total counts or values scaled by the country population size."),
                             br(),
                             shiny::selectInput("xscale_w", "Set x-axis to calendar date or days since a specified total number of cases/deaths", c("Calendar Date" = "x_time", "Days since N cases/hospitalizations/deaths" = "x_count")),
-                            sliderInput(inputId = "x_limit_w", "Select a date or outcome value from which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") ),
+                            sliderInput(inputId = "x_limit_w", "Select a date or outcome value from which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-03-01","%Y-%m-%d") ),
                             shiny::div("Modify all three plots to begin at a specified starting date or outcome value designated in the slider above."),
                             br(),
                             shiny::selectInput(  "yscale_w", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
