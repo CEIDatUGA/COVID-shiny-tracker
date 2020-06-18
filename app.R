@@ -11,17 +11,14 @@ library(plotly)
 library(RColorBrewer)
 library(tm)
 
-#prevent shiny from overwriting our error message
-#not used right now, using safeError below instead
-#options(shiny.sanitize.errors = FALSE)
 
-#******************************
-#general: let's try to do as much using the tidyverse style/functions as possible
-#if possible get rid of merge() and replace with one of the join_ functions
-#also, gather() is outdated, if possible use pivot_longer
-#instead of rbind and cbind, bind_rows and bind_cols is better
-#*****************************
+#################################
+#define some variables used often
+#################################
 
+#starting date for date slider and default starting date to show
+mindate = as.Date("2020-02-01","%Y-%m-%d")
+defaultdate = as.Date("2020-03-01","%Y-%m-%d")
 
 #################################
 # make functions
@@ -49,6 +46,7 @@ add_US <- function(df){
                    mutate(Population_Size = max(Population_Size))
   return(df_new)
 }
+
 #function to clean usafacts state-level data (part 1)
 clean_usafacts_p1 <- function(df, state_df){
   part_one <- df %>% dplyr::group_by(stateFIPS) %>% 
@@ -94,9 +92,8 @@ clean_world_jhu <- function(df, world_popsize){
 }
 
 #################################
-# Load all data
-# should be online so things update automatically
-#for speed, we only get data from the online source if the data is old, otherwise we load locally
+# Function to get and clean all data
+# for speed, we only get data from the online source if the data is old, otherwise we load locally
 #################################
 
 # to ensure data gets refreshed on server, we need this
@@ -109,22 +106,14 @@ get_data <- function()
   }
   #if data file is not here, go through all of the below
   
-  #*******************************
-  #let's get the popsize files standardized 
-  #rename the population size to pop_size in each file
-  #rename Location to state for county_popsize and add state_abr
-  #all variable names lower case
-  #might require a few lines of code adjustment in the cleaning code
-  #******************************
-  
   #data for population size for each state/country so we can compute cases per 100K
-  us_popsize <- readRDS(here("data","us_popsize.rds")) %>% rename(state_abr = state, state = state_full, pop_size = total_pop)
+  us_popsize <- readRDS(here("data","us_popsize.rds")) %>%
+                rename(state_abr = state, state = state_full, pop_size = total_pop)
   world_popsize <-readRDS(here("data","world_popsize.rds"))
   county_popsize <- readRDS(here("data", "county_popsize.rds"))
   
   all_data = list() #will save and return all datasets as list
   
-   
   #################################
   # pull state level and testing data from Covidtracking and process
   #################################
@@ -306,7 +295,6 @@ get_data <- function()
   # combine all data 
   #################################
   
-  
   message('starting state/county data combining')
   
   # give each US dataset a source label
@@ -373,252 +361,8 @@ get_data <- function()
   #save the data
   saveRDS(all_data, filename)    
   return(all_data)
-  
-  
+
 } # end the get-data function which pulls data from the various online sources and processes/saves  
-
-###########################################
-# function that re-reads the data every so often
-###########################################
-all_data <- reactivePoll(intervalMillis = 1000*60*60*3, # pull new data every N hours
-                         session = NULL,
-                         checkFunc = function() {Sys.time()}, #this will always return a different value, which means at intervals specified by intervalMillis the new data will be pulled
-                         valueFunc = function() {get_data()} )
-
-#read data is reactive, doesn't work for rest below 
-all_dat = isolate(all_data())
-
-# pull data out of list 
-world_dat = all_dat$world_dat 
-us_dat = all_dat$us_dat 
-county_dat = all_dat$county_dat
-
-#define variables for location and source selectors
-state_var = sort(unique(us_dat$location))  
-state_var = c("US",state_var[!state_var=="US"]) #move US to front
-country_var = sort(unique(world_dat$location))
-county_var = sort(unique(county_dat$location))
-state_var_county = sort(unique(county_dat$state))
-
-us_source_var = unique(us_dat$source)
-world_source_var = unique(world_dat$source)
-county_source_var = unique(county_dat$source)
-
-#################################
-# Define UI
-#################################
-ui <- fluidPage(
-  tags$head(includeHTML(here("www","google-analytics.html"))), #this is for Google analytics tracking.
-  includeCSS(here("www","appstyle.css")),
-  #main tabs
-  navbarPage( title = "COVID-19 Tracker", id = 'current_tab', selected = "us", header = "",
-              tabPanel(title = "US States", value = "us",
-                       sidebarLayout(
-                         sidebarPanel(
-                           shinyWidgets::pickerInput("state_selector", "Select State(s)", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("Georgia","California","Washington") ),
-                           shiny::div("US is at start of state list."),
-                           br(),
-                           shinyWidgets::pickerInput("source_selector", "Select Source(s)", us_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("COVIDTracking") ),
-                           shiny::div("Choose data sources (see 'About' tab for details)."),
-                           br(),
-                           shiny::selectInput( "case_death",   "Outcome",c("Cases" = "Cases", "Hospitalizations" = "Hospitalized", "Deaths" = "Deaths")),
-                           shiny::div("Modify the top plot to display cases, hospitalizations, or deaths."),
-                           br(),
-                           shiny::selectInput("daily_tot", "Daily or cumulative numbers", c("Daily" = "Daily", "Total" = "Total" )),
-                           shiny::div("Modify all three plots to show daily or cumulative data."),
-                           br(),
-                           shiny::selectInput("show_smoother", "Add trend line", c("No" = "No", "Yes" = "Yes")),
-                           shiny::div("Shows a trend line for cases/hospitalizations/deaths plot."),
-                           br(),
-                           shiny::selectInput( "absolute_scaled","Absolute or scaled values",c("Absolute Number" = "actual", "Per 100,000 persons" = "scaled") ),
-                           shiny::div("Modify the top two plots to display total counts or values scaled by the state/territory population size."),
-                           br(),
-                           shiny::selectInput("xscale", "Set x-axis to calendar date or days since a specified total number of cases/hospitalizations/deaths", c("Calendar Date" = "x_time", "Days since N cases/hospitalizations/deaths" = "x_count")),
-                           sliderInput(inputId = "x_limit", "Select a date or outcome value from which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") ),
-                           shiny::div("Modify all three plots to begin at a specified starting date or outcome value designated in the slider above."),
-                           br(),
-                           shiny::selectInput(  "yscale", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
-                           shiny::div("Modify the top two plots to show data on a linear or logarithmic scale."),
-                           br()
-                         ),         #end sidebar panel
-                         # Output:
-                         mainPanel(
-                           #change to plotOutput if using static ggplot object
-                           plotlyOutput(outputId = "case_death_plot", height = "300px"),
-                           #change to plotOutput if using static ggplot object
-                           plotlyOutput(outputId = "testing_plot", height = "300px"),
-                           #change to plotOutput if using static ggplot object
-                           plotlyOutput(outputId = "testing_frac_plot", height = "300px")
-                         ) #end main panel
-                       ) #end sidebar layout     
-              ), #close US tab
-              
-           
-              tabPanel( title = "US Counties", value = "county",
-                        sidebarLayout(
-                          sidebarPanel(
-                            #County selector 
-                            shinyWidgets::pickerInput("state_selector_c", "Select state", state_var_county,  multiple = FALSE, options = list(`actions-box` = TRUE), selected = c("Georgia")),
-                            shinyWidgets::pickerInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = county_var[1]),
-                            #shinyWidgets::pickerInput("source_selector_c", "Select Source(s)", county_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") ),
-                            #shiny::div("Choose data sources (see 'About' tab for details)."),
-                            #br(),
-                            shiny::selectInput( "case_death_c", "Outcome", c("Cases" = "Cases", "Deaths" = "Deaths")),
-                            shiny::div("Modify the plot to display cases or deaths."),
-                            br(),
-                            shiny::selectInput("daily_tot_c", "Daily or cumulative numbers", c("Daily" = "Daily", "Total" = "Total")),
-                            shiny::div("Modify the plot to reflect daily or cumulative data."),
-                            br(),
-                            shiny::selectInput("show_smoother_c", "Add trend line", c("No" = "No", "Yes" = "Yes")),
-                            shiny::div("Shows a trend line for cases/hospitalizations/deaths plot."),
-                            br(),
-                            shiny::selectInput("absolute_scaled_c", "Absolute or scaled values", c("Absolute Number" = "actual", "Per 100,000 persons" = "scaled") ),
-                            shiny::div("Modify the plot to display total counts or values scaled by the county population size."),
-                            br(),
-                            sliderInput(inputId = "x_limit_c", "Select a date at which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") ),
-                            br(),
-                            shiny::selectInput(  "yscale_c", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
-                            shiny::div("Modify the plot to show data on a linear or logarithmic scale."),
-                            br()
-                          ), #end sidebar panel
-                          
-                          mainPanel(
-                            #change to plotOutput if using static ggplot object
-                            plotlyOutput(outputId = "county_case_death_plot", height = "500px")
-                          ) #end main panel
-                          
-                        ), #close sidebar layout
-              ), #close county tab
-              
-              tabPanel( title = "World", value = "world",
-                        sidebarLayout(
-                          sidebarPanel(
-                            #Country selector coding with US, Italy, and Spain as always selected for a defult setting, will flash an error with none selected
-                            shinyWidgets::pickerInput("country_selector", "Select countries", country_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("US", "United Kingdom", "Germany")),
-                            shinyWidgets::pickerInput("source_selector_w", "Select Source(s)", world_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") ),
-                            shiny::div("Choose data sources (see 'About' tab for details)."),
-                            br(),
-                            shiny::selectInput( "case_death_w", "Outcome", c("Cases" = "Cases", "Deaths" = "Deaths")),
-                            shiny::div("Modify the plot to display cases or deaths."),
-                            br(),
-                            shiny::selectInput("daily_tot_w", "Daily or cumulative numbers", c("Daily" = "Daily", "Total" = "Total")),
-                            shiny::div("Modify the plot to reflect daily or cumulative data."),
-                            br(),
-                            shiny::selectInput("show_smoother_w", "Add trend line", c("No" = "No", "Yes" = "Yes")),
-                            shiny::div("Shows a trend line for cases/hospitalizations/deaths plot."),
-                            br(),
-                            shiny::selectInput("absolute_scaled_w", "Absolute or scaled values", c("Absolute Number" = "actual", "Per 100,000 persons" = "scaled") ),
-                            shiny::div("Modify the plot to display total counts or values scaled by the country population size."),
-                            br(),
-                            shiny::selectInput("xscale_w", "Set x-axis to calendar date or days since a specified total number of cases/deaths", c("Calendar Date" = "x_time", "Days since N cases/hospitalizations/deaths" = "x_count")),
-                            sliderInput(inputId = "x_limit_w", "Select a date or outcome value from which to start the plots.", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") ),
-                            shiny::div("Modify all three plots to begin at a specified starting date or outcome value designated in the slider above."),
-                            br(),
-                            shiny::selectInput(  "yscale_w", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
-                            shiny::div("Modify the plot to show data on a linear or logarithmic scale."),
-                            br()
-                          ), #end sidebar panel
-                          
-                          mainPanel(
-                            #change to plotOutput if using static ggplot object
-                            plotlyOutput(outputId = "world_case_death_plot", height = "300px"),
-                            #change to plotOutput if using static ggplot object
-                            plotlyOutput(outputId = "world_testing_plot", height = "300px"),
-                            #change to plotOutput if using static ggplot object
-                            plotlyOutput(outputId = "world_testing_frac_plot", height = "300px")
-                          ) #end main panel
-                          
-                        ), #close sidebar layout
-              ), #close world tab
-              
-              tabPanel( title = "About", value = "about",
-                        tagList(    
-                          fluidRow( #all of this is the header
-                            tags$div(
-                              id = "bigtext",
-                              "This COVID-19 tracker is brought to you by the",
-                              a("Center for the Ecology of Infectious Diseases",  href = "https://ceid.uga.edu", target = "_blank" ),
-                              "and the",
-                              a("College of Public Health", href = "https://publichealth.uga.edu", target = "_blank"),
-                              "at the",
-                              a("University of Georgia.", href = "https://www.uga.edu", target = "_blank"),
-                              "It was developed by",
-                              a("Robbie Richards,", href = "https://rlrichards.github.io", target =  "_blank"),
-                              a("William Norfolk", href = "https://github.com/williamnorfolk", target = "_blank"),
-                              "and ",
-                              a("Andreas Handel.", href = "https://www.andreashandel.com/", target = "_blank"),
-                              'Source code for this project can be found',
-                              a( "in this GitHub repository.", href = "https://github.com/CEIDatUGA/COVID-shiny-tracker", target = "_blank" ),
-                              'We welcome feedback and feature requests, please send them as a',
-                              a( "GitHub Issue", href = "https://github.com/CEIDatUGA/COVID-shiny-tracker/issues", target = "_blank" ),
-                              'or contact',
-                              a("Andreas Handel.", href = "https://www.andreashandel.com/", target = "_blank")
-                            ),# and tag
-                            tags$div(
-                              id = "bigtext",
-                              "We currently include 4 different data sources for US states.", 
-                              a("The Covid Tracking Project",  href = "https://covidtracking.com/", target = "_blank" ),
-                              "data source reports all and positive tests, hospitalizations (some states) and deaths. We interpret positive tests as corresponding to new cases. The",
-                              a("New York Times (NYT),", href = "https://github.com/nytimes/covid-19-data", target = "_blank" ),
-                              a("USA Facts", href = "https://usafacts.org/visualizations/coronavirus-covid-19-spread-map/", target = "_blank" ),
-                              "and",
-                              a("Johns Hopkins University Center for Systems Science and Engineering (JHU)", href = "https://github.com/CSSEGISandData/COVID-19", target = "_blank" ),
-                              "sources report cases and deaths."
-                              ), 
-                            tags$div(
-                              id = "bigtext",
-                              "For the county level plots, we use JHU data. (NY Times and USA Facts also provide data on the county level, however all 3 data sources are very similar and for speed/memory purposes we decided to only display one county level data source.)"         
-                              ), 
-                            tags$div(
-                              id = "bigtext",
-                              "World data comes from 2 different sources. One source is the", 
-                              a("Johns Hopkins University Center for Systems Science and Engineering (JHU)", href = "https://github.com/CSSEGISandData/COVID-19", target = "_blank" ),
-                              "the other source is",
-                              a("Our World in Data (OWID).", href = "https://github.com/owid/covid-19-data/tree/master/public/data", target = "_blank" ),
-                              "Both sources provide case and death data, OWID also provides testing data for some countries. For OWID, we assume reported cases correspond to positive tests."
-                            ),
-                            tags$div(
-                              id = "bigtext",
-                              "For more details on each data source, see their respective websites. Note that some data sources only report some data. Also, numbers might not be reliable, which can lead to nonsensical graphs (e.g. negative new daily cases/deaths or the fraction of positive tests being greater than 1). We make no attempt at cleaning/fixing the data, we only display it."
-                            ),              
-                            tags$div(
-                              id = "bigtext",
-                              a( "The Center for the Ecology of Infectious Diseases", href = "https://ceid.uga.edu", target = "_blank" ),
-                              'has several additional projects related to COVID-19, which can be found on the',
-                              a( "CEID COVID-19 Portal.", href = "http://2019-coronavirus-tracker.com/", target = "_blank" )
-                            ), #Close the bigtext text div
-                            tags$div(
-                              id = "bigtext",
-                              "If you are interested in learning more about infectious disease epidemiology and modeling, check out", 
-                              a("our (slightly advanced) interactive modeling software and tutorial.", href = "https://shiny.ovpr.uga.edu/DSAIDE/", target = "_blank" )
-                            ) #Close the bigtext text div
-                          ), #close fluidrow
-                          fluidRow( #all of this is the footer
-                            column(3,
-                                   a(href = "https://ceid.uga.edu", tags$img(src = "ceidlogo.png", width = "100%"), target = "_blank"),
-                            ),
-                            column(6,
-                                   p('All text and figures are licensed under a ',
-                                     a("Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.",
-                                       href = "http://creativecommons.org/licenses/by-nc-sa/4.0/", target = "_blank"),
-                                     'Software/Code is licensed under ',
-                                     a("GPL-3.", href = "https://www.gnu.org/licenses/gpl-3.0.en.html" , target =  "_blank"),
-                                     'See source data sites for licenses governing data.',
-                                     a("UGA's Privacy Policy.", href = "https://eits.uga.edu/access_and_security/infosec/pols_regs/policies/privacy/" , target =  "_blank"),
-                                     align = "center",
-                                     style = "font-size:small"
-                                   ) #end paragraph
-                            ), #end middle column
-                            column(3,
-                                   a(href = "https://publichealth.uga.edu", tags$img(src = "cphlogo.png", width = "100%"), target = "_blank")
-                            ) #end left column
-                          ) #end fluidrow
-                        ) #end taglist
-              ) #close about tab
-  ) #close NavBarPage
-) #end fluidpage and UI part of shiny app
-#end UI of shiny app
-###########################################
 
 
 ###########################################
@@ -626,6 +370,59 @@ ui <- fluidPage(
 ###########################################
 server <- function(input, output, session) {
 
+  
+  ###########################################
+  # function that re-reads the data every so often
+  ###########################################
+  all_data <- reactivePoll(intervalMillis = 1000*60*60*3, # pull new data every N hours
+                           session = NULL,
+                           checkFunc = function() {Sys.time()}, #this will always return a different value, which means at intervals specified by intervalMillis the new data will be pulled
+                           valueFunc = function() {get_data()} )
+  
+  #read data is reactive, doesn't work for rest below 
+  all_dat = isolate(all_data())
+  #all_dat = all_data
+  
+  # pull data out of list 
+  world_dat = all_dat$world_dat 
+  us_dat = all_dat$us_dat 
+  county_dat = all_dat$county_dat
+  
+  #define variables for location and source selectors
+  state_var = sort(unique(us_dat$location))  
+  state_var <- c("US",state_var[!state_var=="US"]) #move US to front
+  country_var = sort(unique(world_dat$location))
+  county_var = sort(unique(county_dat$location))
+  state_var_county = sort(unique(county_dat$state))
+  
+  us_source_var = unique(us_dat$source)
+  world_source_var = unique(world_dat$source)
+  county_source_var = unique(county_dat$source)
+  
+  ################################################################################################
+  #create the following UI elements on server and then add to UI sincc they depend on the variables above 
+  #those variables are only defined on server
+  ################################################################################################
+  output$state_selector = renderUI({
+    shinyWidgets::pickerInput("state_selector", "Select State(s)", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("Georgia","California","Washington") )
+  })
+  output$source_selector = renderUI({
+    shinyWidgets::pickerInput("source_selector", "Select Source(s)", us_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("COVIDTracking") )
+  })
+  output$state_selector_c = renderUI({
+                      shinyWidgets::pickerInput("state_selector_c", "Select state", state_var_county,  multiple = FALSE, options = list(`actions-box` = TRUE), selected = c("Georgia"))
+  })
+  output$county_selector = renderUI({
+     shinyWidgets::pickerInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = county_var[1])
+  })
+  output$country_selector = renderUI({
+      shinyWidgets::pickerInput("country_selector", "Select countries", country_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("US", "United Kingdom", "Germany"))
+  })
+  output$source_selector_w = renderUI({
+     shinyWidgets::pickerInput("source_selector_w", "Select Source(s)", world_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") )
+  })
+  
+      
   #watch the choice for the x-scale and choose what to show underneath accordingly
   observeEvent(input$xscale,
                {
@@ -635,7 +432,7 @@ server <- function(input, output, session) {
                    shiny::updateSliderInput(session, "x_limit", min = 1,  max = 500, step = 10, value = 1 )
                  } else
                  {
-                   shiny::updateSliderInput(session, "x_limit", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") )
+                   shiny::updateSliderInput(session, "x_limit", min = mindate,  max = Sys.Date(), value = defaultdate )
                  }
                }) #end observe event  
   
@@ -648,7 +445,7 @@ server <- function(input, output, session) {
                    shiny::updateSliderInput(session, "x_limit_w", min = 1,  max = 500, step = 10, value = 1 )
                  } else
                  {
-                   shiny::updateSliderInput(session, "x_limit_w", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") )
+                   shiny::updateSliderInput(session, "x_limit_w", min = mindate,  max = Sys.Date(), value = defaultdate )
                  }
                }) #end observe event 
   
@@ -661,7 +458,7 @@ server <- function(input, output, session) {
                    shiny::updateSliderInput(session, "x_limit_c", min = 1,  max = 500, step = 10, value = 1 )
                  } else
                  {
-                   shiny::updateSliderInput(session, "x_limit_c", min = as.Date("2020-01-22","%Y-%m-%d"),  max = Sys.Date(), value = as.Date("2020-02-01","%Y-%m-%d") )
+                   shiny::updateSliderInput(session, "x_limit_c", min = mindate,  max = Sys.Date(), value = defaultdate )
                  }
                }) #end observe event  
   
@@ -747,8 +544,6 @@ server <- function(input, output, session) {
                   filter(variable %in% outcome) %>%
                   filter(date >= x_limit) 
     }
-    
-     
     
     
     #set labels and tool tips based on input - entries 2 and 3 are ignored for world plot
@@ -935,6 +730,221 @@ server <- function(input, output, session) {
   }) #end function making case/deaths plot
   
 } #end server function
+
+
+#################################
+# Define UI
+#################################
+ui <- fluidPage(
+  tags$head(includeHTML(here("www","google-analytics.html"))), #this is for Google analytics tracking.
+  includeCSS(here("www","appstyle.css")),
+  #main tabs
+  navbarPage( title = "COVID-19 Tracker", id = 'current_tab', selected = "us", header = "",
+              tabPanel(title = "US States", value = "us",
+                       sidebarLayout(
+                         sidebarPanel(
+                           uiOutput('state_selector'),
+                           shiny::div("US is at start of state list."),
+                           br(),
+                           uiOutput('source_selector'),
+                           shiny::div("Choose data sources (see 'About' tab for details)."),
+                           br(),
+                           shiny::selectInput( "case_death",   "Outcome",c("Cases" = "Cases", "Hospitalizations" = "Hospitalized", "Deaths" = "Deaths")),
+                           shiny::div("Modify the top plot to display cases, hospitalizations, or deaths."),
+                           br(),
+                           shiny::selectInput("daily_tot", "Daily or cumulative numbers", c("Daily" = "Daily", "Total" = "Total" )),
+                           shiny::div("Modify all three plots to show daily or cumulative data."),
+                           br(),
+                           shiny::selectInput("show_smoother", "Add trend line", c("No" = "No", "Yes" = "Yes")),
+                           shiny::div("Shows a trend line for cases/hospitalizations/deaths plot."),
+                           br(),
+                           shiny::selectInput( "absolute_scaled","Absolute or scaled values",c("Absolute Number" = "actual", "Per 100,000 persons" = "scaled") ),
+                           shiny::div("Modify the top two plots to display total counts or values scaled by the state/territory population size."),
+                           br(),
+                           shiny::selectInput("xscale", "Set x-axis to calendar date or days since a specified total number of cases/hospitalizations/deaths", c("Calendar Date" = "x_time", "Days since N cases/hospitalizations/deaths" = "x_count")),
+                           sliderInput(inputId = "x_limit", "Select a date or outcome value from which to start the plots.", min = mindate,  max = Sys.Date(), value = defaultdate ),
+                           shiny::div("Modify all three plots to begin at a specified starting date or outcome value designated in the slider above."),
+                           br(),
+                           shiny::selectInput(  "yscale", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
+                           shiny::div("Modify the top two plots to show data on a linear or logarithmic scale."),
+                           br()
+                         ),         #end sidebar panel
+                         # Output:
+                         mainPanel(
+                           #change to plotOutput if using static ggplot object
+                           plotlyOutput(outputId = "case_death_plot", height = "300px"),
+                           #change to plotOutput if using static ggplot object
+                           plotlyOutput(outputId = "testing_plot", height = "300px"),
+                           #change to plotOutput if using static ggplot object
+                           plotlyOutput(outputId = "testing_frac_plot", height = "300px")
+                         ) #end main panel
+                       ) #end sidebar layout     
+              ), #close US tab
+              
+              
+              tabPanel( title = "US Counties", value = "county",
+                        sidebarLayout(
+                          sidebarPanel(
+                            #County selector 
+                            uiOutput('state_selector_c'),
+                            uiOutput('county_selector'),
+                            shiny::selectInput( "case_death_c", "Outcome", c("Cases" = "Cases", "Deaths" = "Deaths")),
+                            shiny::div("Modify the plot to display cases or deaths."),
+                            br(),
+                            shiny::selectInput("daily_tot_c", "Daily or cumulative numbers", c("Daily" = "Daily", "Total" = "Total")),
+                            shiny::div("Modify the plot to reflect daily or cumulative data."),
+                            br(),
+                            shiny::selectInput("show_smoother_c", "Add trend line", c("No" = "No", "Yes" = "Yes")),
+                            shiny::div("Shows a trend line for cases/hospitalizations/deaths plot."),
+                            br(),
+                            shiny::selectInput("absolute_scaled_c", "Absolute or scaled values", c("Absolute Number" = "actual", "Per 100,000 persons" = "scaled") ),
+                            shiny::div("Modify the plot to display total counts or values scaled by the county population size."),
+                            br(),
+                            sliderInput(inputId = "x_limit_c", "Select a date at which to start the plots.", min = mindate,  max = Sys.Date(), value = defaultdate ),
+                            br(),
+                            shiny::selectInput(  "yscale_c", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
+                            shiny::div("Modify the plot to show data on a linear or logarithmic scale."),
+                            br()
+                          ), #end sidebar panel
+                          
+                          mainPanel(
+                            #change to plotOutput if using static ggplot object
+                            plotlyOutput(outputId = "county_case_death_plot", height = "500px")
+                          ) #end main panel
+                          
+                        ), #close sidebar layout
+              ), #close county tab
+              
+              tabPanel( title = "World", value = "world",
+                        sidebarLayout(
+                          sidebarPanel(
+                            uiOutput('country_selector'),
+                            uiOutput('source_selector_w'),
+                            shiny::div("Choose data sources (see 'About' tab for details)."),
+                            br(),
+                            shiny::selectInput( "case_death_w", "Outcome", c("Cases" = "Cases", "Deaths" = "Deaths")),
+                            shiny::div("Modify the plot to display cases or deaths."),
+                            br(),
+                            shiny::selectInput("daily_tot_w", "Daily or cumulative numbers", c("Daily" = "Daily", "Total" = "Total")),
+                            shiny::div("Modify the plot to reflect daily or cumulative data."),
+                            br(),
+                            shiny::selectInput("show_smoother_w", "Add trend line", c("No" = "No", "Yes" = "Yes")),
+                            shiny::div("Shows a trend line for cases/hospitalizations/deaths plot."),
+                            br(),
+                            shiny::selectInput("absolute_scaled_w", "Absolute or scaled values", c("Absolute Number" = "actual", "Per 100,000 persons" = "scaled") ),
+                            shiny::div("Modify the plot to display total counts or values scaled by the country population size."),
+                            br(),
+                            shiny::selectInput("xscale_w", "Set x-axis to calendar date or days since a specified total number of cases/deaths", c("Calendar Date" = "x_time", "Days since N cases/hospitalizations/deaths" = "x_count")),
+                            sliderInput(inputId = "x_limit_w", "Select a date or outcome value from which to start the plots.", min = mindate,  max = Sys.Date(), value = defaultdate ),
+                            shiny::div("Modify all three plots to begin at a specified starting date or outcome value designated in the slider above."),
+                            br(),
+                            shiny::selectInput(  "yscale_w", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
+                            shiny::div("Modify the plot to show data on a linear or logarithmic scale."),
+                            br()
+                          ), #end sidebar panel
+                          
+                          mainPanel(
+                            #change to plotOutput if using static ggplot object
+                            plotlyOutput(outputId = "world_case_death_plot", height = "300px"),
+                            #change to plotOutput if using static ggplot object
+                            plotlyOutput(outputId = "world_testing_plot", height = "300px"),
+                            #change to plotOutput if using static ggplot object
+                            plotlyOutput(outputId = "world_testing_frac_plot", height = "300px")
+                          ) #end main panel
+                          
+                        ), #close sidebar layout
+              ), #close world tab
+              
+              tabPanel( title = "About", value = "about",
+                        tagList(    
+                          fluidRow( #all of this is the header
+                            tags$div(
+                              id = "bigtext",
+                              "This COVID-19 tracker is brought to you by the",
+                              a("Center for the Ecology of Infectious Diseases",  href = "https://ceid.uga.edu", target = "_blank" ),
+                              "and the",
+                              a("College of Public Health", href = "https://publichealth.uga.edu", target = "_blank"),
+                              "at the",
+                              a("University of Georgia.", href = "https://www.uga.edu", target = "_blank"),
+                              "It was developed by",
+                              a("Robbie Richards,", href = "https://rlrichards.github.io", target =  "_blank"),
+                              a("William Norfolk", href = "https://github.com/williamnorfolk", target = "_blank"),
+                              "and ",
+                              a("Andreas Handel.", href = "https://www.andreashandel.com/", target = "_blank"),
+                              'Source code for this project can be found',
+                              a( "in this GitHub repository.", href = "https://github.com/CEIDatUGA/COVID-shiny-tracker", target = "_blank" ),
+                              'We welcome feedback and feature requests, please send them as a',
+                              a( "GitHub Issue", href = "https://github.com/CEIDatUGA/COVID-shiny-tracker/issues", target = "_blank" ),
+                              'or contact',
+                              a("Andreas Handel.", href = "https://www.andreashandel.com/", target = "_blank")
+                            ),# and tag
+                            tags$div(
+                              id = "bigtext",
+                              "We currently include 4 different data sources for US states.", 
+                              a("The Covid Tracking Project",  href = "https://covidtracking.com/", target = "_blank" ),
+                              "data source reports all and positive tests, hospitalizations (some states) and deaths. We interpret positive tests as corresponding to new cases. The",
+                              a("New York Times (NYT),", href = "https://github.com/nytimes/covid-19-data", target = "_blank" ),
+                              a("USA Facts", href = "https://usafacts.org/visualizations/coronavirus-covid-19-spread-map/", target = "_blank" ),
+                              "and",
+                              a("Johns Hopkins University Center for Systems Science and Engineering (JHU)", href = "https://github.com/CSSEGISandData/COVID-19", target = "_blank" ),
+                              "sources report cases and deaths."
+                            ), 
+                            tags$div(
+                              id = "bigtext",
+                              "For the county level plots, we use JHU data. (NY Times and USA Facts also provide data on the county level, however all 3 data sources are very similar and for speed/memory purposes we decided to only display one county level data source.)"         
+                            ), 
+                            tags$div(
+                              id = "bigtext",
+                              "World data comes from 2 different sources. One source is the", 
+                              a("Johns Hopkins University Center for Systems Science and Engineering (JHU)", href = "https://github.com/CSSEGISandData/COVID-19", target = "_blank" ),
+                              "the other source is",
+                              a("Our World in Data (OWID).", href = "https://github.com/owid/covid-19-data/tree/master/public/data", target = "_blank" ),
+                              "Both sources provide case and death data, OWID also provides testing data for some countries. For OWID, we assume reported cases correspond to positive tests."
+                            ),
+                            tags$div(
+                              id = "bigtext",
+                              "For more details on each data source, see their respective websites. Note that some data sources only report some data. Also, numbers might not be reliable, which can lead to nonsensical graphs (e.g. negative new daily cases/deaths or the fraction of positive tests being greater than 1). We make no attempt at cleaning/fixing the data, we only display it."
+                            ),              
+                            tags$div(
+                              id = "bigtext",
+                              a( "The Center for the Ecology of Infectious Diseases", href = "https://ceid.uga.edu", target = "_blank" ),
+                              'has several additional projects related to COVID-19, which can be found on the',
+                              a( "CEID COVID-19 Portal.", href = "http://2019-coronavirus-tracker.com/", target = "_blank" )
+                            ), #Close the bigtext text div
+                            tags$div(
+                              id = "bigtext",
+                              "If you are interested in learning more about infectious disease epidemiology and modeling, check out", 
+                              a("our (slightly advanced) interactive modeling software and tutorial.", href = "https://shiny.ovpr.uga.edu/DSAIDE/", target = "_blank" )
+                            ) #Close the bigtext text div
+                          ), #close fluidrow
+                          fluidRow( #all of this is the footer
+                            column(3,
+                                   a(href = "https://ceid.uga.edu", tags$img(src = "ceidlogo.png", width = "100%"), target = "_blank"),
+                            ),
+                            column(6,
+                                   p('All text and figures are licensed under a ',
+                                     a("Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.",
+                                       href = "http://creativecommons.org/licenses/by-nc-sa/4.0/", target = "_blank"),
+                                     'Software/Code is licensed under ',
+                                     a("GPL-3.", href = "https://www.gnu.org/licenses/gpl-3.0.en.html" , target =  "_blank"),
+                                     'See source data sites for licenses governing data.',
+                                     a("UGA's Privacy Policy.", href = "https://eits.uga.edu/access_and_security/infosec/pols_regs/policies/privacy/" , target =  "_blank"),
+                                     align = "center",
+                                     style = "font-size:small"
+                                   ) #end paragraph
+                            ), #end middle column
+                            column(3,
+                                   a(href = "https://publichealth.uga.edu", tags$img(src = "cphlogo.png", width = "100%"), target = "_blank")
+                            ) #end left column
+                          ) #end fluidrow
+                        ) #end taglist
+              ) #close about tab
+  ) #close NavBarPage
+) #end fluidpage and UI part of shiny app
+#end UI of shiny app
+###########################################
+
+
 
 # Create Shiny object
 shinyApp(ui = ui, server = server)
