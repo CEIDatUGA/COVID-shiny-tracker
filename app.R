@@ -377,7 +377,13 @@ server <- function(input, output, session) {
   all_data <- reactivePoll(intervalMillis = 1000*60*60*3, # pull new data every N hours
                            session = NULL,
                            checkFunc = function() {Sys.time()}, #this will always return a different value, which means at intervals specified by intervalMillis the new data will be pulled
-                           valueFunc = function() {get_data()} )
+                           valueFunc = function() {
+                             withProgress(message = 'Loading data, please be patient.',
+                                          detail = "", value = 0,
+                                          {
+                                            get_data()
+                                          } ) #end with-progress wrapper
+                 })   
   
   #read data is reactive, doesn't work for rest below 
   all_dat = isolate(all_data())
@@ -752,20 +758,20 @@ ui <- fluidPage(
                            shiny::selectInput( "case_death",   "Outcome",c("Cases" = "Cases", "Hospitalizations" = "Hospitalized", "Deaths" = "Deaths")),
                            shiny::div("Modify the top plot to display cases, hospitalizations, or deaths."),
                            br(),
-                           shiny::selectInput("daily_tot", "Daily or cumulative numbers", c("Daily" = "Daily", "Total" = "Total" )),
+                           shiny::radioButtons("daily_tot", label = h4("Daily or cumulative numbers"), choices = list("Daily" = "Daily", "Cumulative" = "Total"), selected = "Daily"),
                            shiny::div("Modify all three plots to show daily or cumulative data."),
                            br(),
                            shiny::selectInput("show_smoother", "Add trend line", c("No" = "No", "Yes" = "Yes")),
                            shiny::div("Shows a trend line for cases/hospitalizations/deaths plot."),
                            br(),
-                           shiny::selectInput( "absolute_scaled","Absolute or scaled values",c("Absolute Number" = "actual", "Per 100,000 persons" = "scaled") ),
+                           shiny::radioButtons("absolute_scaled", label = h4("Absolute or scaled values"), choices = list("Absolute Number" = "absolute", "Per 100,000 persons" = "scaled"), selected = "absolute"),
                            shiny::div("Modify the top two plots to display total counts or values scaled by the state/territory population size."),
                            br(),
                            shiny::selectInput("xscale", "Set x-axis to calendar date or days since a specified total number of cases/hospitalizations/deaths", c("Calendar Date" = "x_time", "Days since N cases/hospitalizations/deaths" = "x_count")),
                            sliderInput(inputId = "x_limit", "Select a date or outcome value from which to start the plots.", min = mindate,  max = Sys.Date(), value = defaultdate ),
                            shiny::div("Modify all three plots to begin at a specified starting date or outcome value designated in the slider above."),
                            br(),
-                           shiny::selectInput(  "yscale", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
+                           shiny::radioButtons("yscale", label = h4("Y-scale"), choices = list("Linear" = "lin", "Logarithmic" = "log"), selected = "lin"),
                            shiny::div("Modify the top two plots to show data on a linear or logarithmic scale."),
                            br()
                          ),         #end sidebar panel
@@ -791,18 +797,18 @@ ui <- fluidPage(
                             shiny::selectInput( "case_death_c", "Outcome", c("Cases" = "Cases", "Deaths" = "Deaths")),
                             shiny::div("Modify the plot to display cases or deaths."),
                             br(),
-                            shiny::selectInput("daily_tot_c", "Daily or cumulative numbers", c("Daily" = "Daily", "Total" = "Total")),
+                            shiny::radioButtons("daily_tot_c", label = h4("Daily or cumulative numbers"), choices = list("Daily" = "Daily", "Cumulative" = "Total"), selected = "Daily"),
                             shiny::div("Modify the plot to reflect daily or cumulative data."),
                             br(),
                             shiny::selectInput("show_smoother_c", "Add trend line", c("No" = "No", "Yes" = "Yes")),
                             shiny::div("Shows a trend line for cases/hospitalizations/deaths plot."),
                             br(),
-                            shiny::selectInput("absolute_scaled_c", "Absolute or scaled values", c("Absolute Number" = "actual", "Per 100,000 persons" = "scaled") ),
+                            shiny::radioButtons("absolute_scaled_c", label = h4("Absolute or scaled values"), choices = list("Absolute Number" = "absolute", "Per 100,000 persons" = "scaled"), selected = "absolute"),
                             shiny::div("Modify the plot to display total counts or values scaled by the county population size."),
                             br(),
                             sliderInput(inputId = "x_limit_c", "Select a date at which to start the plots.", min = mindate,  max = Sys.Date(), value = defaultdate ),
                             br(),
-                            shiny::selectInput(  "yscale_c", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
+                            shiny::radioButtons("yscale_c", label = h4("Y-scale"), choices = list("Linear" = "lin", "Logarithmic" = "log"), selected = "lin"),
                             shiny::div("Modify the plot to show data on a linear or logarithmic scale."),
                             br()
                           ), #end sidebar panel
@@ -825,20 +831,20 @@ ui <- fluidPage(
                             shiny::selectInput( "case_death_w", "Outcome", c("Cases" = "Cases", "Deaths" = "Deaths")),
                             shiny::div("Modify the plot to display cases or deaths."),
                             br(),
-                            shiny::selectInput("daily_tot_w", "Daily or cumulative numbers", c("Daily" = "Daily", "Total" = "Total")),
+                            shiny::radioButtons("daily_tot_w", label = h4("Daily or cumulative numbers"), choices = list("Daily" = "Daily", "Cumulative" = "Total"), selected = "Daily"),
                             shiny::div("Modify the plot to reflect daily or cumulative data."),
                             br(),
                             shiny::selectInput("show_smoother_w", "Add trend line", c("No" = "No", "Yes" = "Yes")),
                             shiny::div("Shows a trend line for cases/hospitalizations/deaths plot."),
                             br(),
-                            shiny::selectInput("absolute_scaled_w", "Absolute or scaled values", c("Absolute Number" = "actual", "Per 100,000 persons" = "scaled") ),
+                            shiny::radioButtons("absolute_scaled_w", label = h4("Absolute or scaled values"), choices = list("Absolute Number" = "absolute", "Per 100,000 persons" = "scaled"), selected = "absolute"),
                             shiny::div("Modify the plot to display total counts or values scaled by the country population size."),
                             br(),
                             shiny::selectInput("xscale_w", "Set x-axis to calendar date or days since a specified total number of cases/deaths", c("Calendar Date" = "x_time", "Days since N cases/hospitalizations/deaths" = "x_count")),
                             sliderInput(inputId = "x_limit_w", "Select a date or outcome value from which to start the plots.", min = mindate,  max = Sys.Date(), value = defaultdate ),
                             shiny::div("Modify all three plots to begin at a specified starting date or outcome value designated in the slider above."),
                             br(),
-                            shiny::selectInput(  "yscale_w", "Y-scale", c("Linear" = "lin", "Logarithmic" = "log")),
+                            shiny::radioButtons("yscale_w", label = h4("Y-scale"), choices = list("Linear" = "lin", "Logarithmic" = "log"), selected = "lin"),
                             shiny::div("Modify the plot to show data on a linear or logarithmic scale."),
                             br()
                           ), #end sidebar panel
