@@ -215,10 +215,12 @@ get_data <- function()
   us_jhu_deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_US.csv")
   # Clean cases
   us_jhu_cases_clean <- clean_us_jhu(us_jhu_cases) %>%
-    tidyr::pivot_longer(cols = c(-state, -FIPS, -Admin2), names_to = "Date", values_to = "Cases")
+    tidyr::pivot_longer(cols = c(-state, -FIPS, -Admin2), names_to = "Date", values_to = "Cases") %>%
+    select(-FIPS)
   # Clean deaths
   us_jhu_deaths_clean <-clean_us_jhu(us_jhu_deaths) %>% 
-    tidyr::pivot_longer(cols = c(-state, -FIPS, -Admin2), names_to = "Date", values_to = "Deaths")
+    tidyr::pivot_longer(cols = c(-state, -FIPS, -Admin2), names_to = "Date", values_to = "Deaths") %>%
+    select(-FIPS)
   #combine cases and deaths
   us_jhu_combined <- inner_join(us_jhu_cases_clean, us_jhu_deaths_clean)
   us_jhu_total <- inner_join(us_jhu_combined, us_popsize) %>%
@@ -232,7 +234,7 @@ get_data <- function()
   
   #Use us_jhu_total to create both the county and state level datasets 
   #Pull county data and reformat to long
-  county_jhu_clean <- us_jhu_total %>% select(-c(Population_Size, FIPS)) %>%
+  county_jhu_clean <- us_jhu_total %>% select(-c(Population_Size)) %>%
     pivot_longer(cols = c(-state, -Date, -county_name), names_to = "variable", values_to = "value")
   
   #add county population numbers 
@@ -240,7 +242,7 @@ get_data <- function()
   
   #pull state data and aggregate county values
   us_jhu_clean <- us_jhu_total %>% 
-                  select(-FIPS, -county_name) %>% 
+                  select(-county_name) %>% 
                   rename(Location = state) %>%
                   group_by(Location, Date, Population_Size) %>% 
                   summarise_if(is.numeric, sum, na.rm=TRUE) %>% 
@@ -869,7 +871,7 @@ ui <- fluidPage(
                             ),
                             tags$div(
                               id = "bigtext",
-                              "For more details on each data source, see their respective websites. Note that some data sources only report some data. Also, numbers might not be reliable, which can lead to nonsensical graphs (e.g. negative new daily cases/deaths or the fraction of positive tests being greater than 1). We make no attempt at cleaning/fixing the data, we only display it."
+                              "For more details on each data source, see their respective websites. Note that some data sources only report some data. Also, numbers might not be reliable. We do light cleaning (e.g. remove negative values), but otherwise just take the data from the sources and display it."
                             ),              
                             tags$div(
                               id = "bigtext",
