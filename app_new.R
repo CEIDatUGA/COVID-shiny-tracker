@@ -11,6 +11,7 @@ library(plotly)
 library(RColorBrewer)
 library(tm)
 library(randomcoloR)
+library(stringr)
 
 
 #################################
@@ -93,19 +94,20 @@ clean_world_jhu <- function(df, world_popsize){
 }
 
 #function to make static colors for datasets
-make_colors <- function(df){
+#make_colors <- function(df){
   #designate colors and list length 
-  location <- unique(df$location)
-  n <- length(location)
-  color_tag <- distinctColorPalette(n)
+#  location <- unique(df$location)
+#  n <- length(location)
+ # add_palette <- colorRampPalette(c("#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D", "#666666"))
+#  color_tag <- add_palette(n)
   #make color dataframe
-  color_frame <- data.frame(location, color_tag)
-  color_frame$color_tag <- as.character(as.factor(color_frame$color_tag))
-  color_frame$location <- as.character(as.factor(color_frame$location))
+ # color_frame <- data.frame(location, color_tag)
+#  color_frame$color_tag <- as.character(as.factor(color_frame$color_tag))
+ # color_frame$location <- as.character(as.factor(color_frame$location))
   #merge colors with tracker data by location
-  add_colors <- left_join(df, color_frame)
-  return(add_colors)
-}
+#  add_colors <- left_join(df, color_frame)
+ # return(add_colors)
+#}
 
 #################################
 # Function to get and clean all data
@@ -434,7 +436,7 @@ server <- function(input, output, session) {
   #those variables are only defined on server
   ################################################################################################
   output$state_selector = renderUI({
-    shinyWidgets::pickerInput("state_selector", "Select States (all US at top)", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("Georgia","California","Washington") )
+    shiny::selectizeInput("state_selector", "Select States (all US at top)", state_var, multiple = TRUE,options = list(`actions-box` = TRUE, maxItems = 8), selected = c("Georgia","California","Washington") )
   })
   output$source_selector = renderUI({
     shinyWidgets::pickerInput("source_selector", "Select Sources (see 'About' tab for details)", us_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("COVIDTracking") )
@@ -446,10 +448,10 @@ server <- function(input, output, session) {
     shinyWidgets::pickerInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = county_var[1])
   })
   output$country_selector = renderUI({
-    shinyWidgets::pickerInput("country_selector", "Select countries", country_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("US", "United Kingdom", "Germany"))
+    shiny::selectizeInput("country_selector", "Select countries", country_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("US", "United Kingdom", "Germany"))
   })
   output$source_selector_w = renderUI({
-    shinyWidgets::pickerInput("source_selector_w", "Select Sources (see 'About' tab for details)", world_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") )
+    shinyWidgets::pickerInput("source_selector_w", "Select Sources (see 'About' tab for details)", world_source_var, multiple = TRUE,options = list(`actions-box` = TRUE, maxItems = 8), selected = c("JHU") )
   })
   
   
@@ -617,21 +619,20 @@ server <- function(input, output, session) {
                          paste0(tool_tip[1], ": ", p_dat$date), 
                          paste0(tool_tip[ylabel+1],": ", outcome, sep ="\n")) 
     
-    # colorset
-    # colorset <- c("US" = "paleturquoise3", "Alabama" = "darkgoldenrod4", "Alaska" = "mediumpurple1", "American Samoa" = "orchid1", "Arizona" = "dimgray", "Arkansas" = "slateblue1", "California" = "tomato2", "Colorado" = "seagreen1", "Connecticut" = "cornflowerblue", "Delaware" = "palegreen3",
-    #              "District of Columbia" = "deepskyblue1", "Florida" = "palevioletred1", "Georgia" = "turquoise3", "Guam" = "hotpink1", "Hawaii" = "peachpuff1", "Idaho" = "snow3", "Illinois" = "chartreuse1", "Indiana" = "darkseagreen", "Iowa" = "mediumpurple2", "Kansas" = "dodgerblue",
-    #             "Kentucky" = "plum1", "Louisiana" = "tomato", "Maine" = "blue", "Mariana Islands" = "bisque3", "Maryland" = "darkgoldenrod1", "Massachusetts" = "palegreen", "Michigan" = "goldenrod3", "Minnesota" = "khaki4", "Mississippi" = "cyan3", "Missouri" = "tan1",
-    #            "Montana" = "hotpink4", "Nebraska" = "deepskyblue4", "Nevada" = "slategray3", "New Hampshire" = "maroon1", "New Jersey" = "chocolate2", "New Mexico" = "maroon", "New York" = "darkmagenta", "North Carolina" = "coral4", "North Dakota" = "firebrick", "Ohio" = "deeppink3",
-    #           "Oklahoma" = "tan3", "Oregon" = "orange", "Pennsylvania" = "cadetblue3", "Puerto Rico" = "navajowhite3", "Rhode Island" = "lightgoldenrod", "South Carolina" = "springgreen4", "South Dakota" = "coral2", "Tennessee" = "mediumaquamarine", 
-    #          "Texas" = "turquoise", "Utah" = "snow3", "Vermont" = "palegoldenrod", "Virgin Islands" = "orange3", "Virginia" = "yellow4", "Washington" = "darkslategrey", "West Virginia" = "lightblue2",
-    #         "Wisconsin" = "tan4", "Wyoming" = "midnightblue")
-    # make plot
+    
+    #make static line colors according to the order in the state selector
+    #use RcolorBrewer Dark2 colors
+    add_palette <<- c("#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D", "#666666")
+    #match colors to the order of locations plugged into the selectize input for state and world figures
+    use_colors <<- add_palette[order(location_selector)]
+    
+    
     pl <- plotly::plot_ly(p_dat) %>% 
       plotly::add_trace(x = ~time, y = ~value, type = 'scatter', 
                         mode = 'lines+markers', 
                         linetype = ~source,
                         line = list(width = linesize), text = tooltip_text, 
-                        color = ~location, colors = ~color_tag) %>%
+                        color = ~location, colors = use_colors) %>%
       layout(yaxis = list(title=y_labels[ylabel], type = yscale, size = 18)) %>%
       layout(legend = list(orientation = "h", x = 0.2, y = -0.3))
     
