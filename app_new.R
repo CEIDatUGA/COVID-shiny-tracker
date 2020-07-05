@@ -364,9 +364,9 @@ get_data <- function()
   county_dat <- county_dat[c("source","location","state", "populationsize","date","variable","value","state_abr")]
   
   #add static colors
-  us_dat <- make_colors(us_dat)
-  world_dat <- make_colors(world_dat)
-  county_dat <- make_colors(county_dat)
+  #us_dat <- make_colors(us_dat)
+  #world_dat <- make_colors(world_dat)
+  #county_dat <- make_colors(county_dat)
   
   #set negative values to zero
   #Comment out the line below to keep negative values in the data for debugging
