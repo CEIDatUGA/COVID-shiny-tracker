@@ -442,10 +442,10 @@ server <- function(input, output, session) {
     shinyWidgets::pickerInput("source_selector", "Select Sources (see 'About' tab for details)", us_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("COVIDTracking") )
   })
   output$state_selector_c = renderUI({
-    shinyWidgets::pickerInput("state_selector_c", "Select state", state_var_county,  multiple = FALSE, options = list(`actions-box` = TRUE), selected = c("Georgia"))
+    shiny::selectizeInput("state_selector_c", "Select state", state_var_county,  multiple = FALSE, options = list(`actions-box` = TRUE), selected = c("Georgia"))
   })
   output$county_selector = renderUI({
-    shinyWidgets::pickerInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = county_var[1])
+    shiny::selectizeInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = county_var[1])
   })
   output$country_selector = renderUI({
     shiny::selectizeInput("country_selector", "Select countries", country_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("US", "United Kingdom", "Germany"))
@@ -500,7 +500,7 @@ server <- function(input, output, session) {
                  #redesignate county_dat to match the state selector input
                  county_dat_sub <- county_dat %>% filter(state %in% input$state_selector_c)
                  county_var_sub = sort(unique(county_dat_sub$location))
-                 shinyWidgets::updatePickerInput(session, "county_selector", "Select counties", county_var_sub, selected = county_var_sub[1])
+                 shiny::updateSelectizeInput(session, "county_selector", "Select counties", county_var_sub, selected = county_var_sub[1])
                })
   
   
@@ -626,6 +626,9 @@ server <- function(input, output, session) {
     #match colors to the order of locations plugged into the selectize input for state and world figures
     use_colors <<- add_palette[order(location_selector)]
     
+    if (current_tab == "county"){
+      test <<- location_selector
+    }
     
     pl <- plotly::plot_ly(p_dat) %>% 
       plotly::add_trace(x = ~time, y = ~value, type = 'scatter', 
