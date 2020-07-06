@@ -617,7 +617,8 @@ server <- function(input, output, session) {
                          paste0(tool_tip[ylabel+1],": ", outcome, sep ="\n")) 
    
     # make plot
-    pl <- plotly::plot_ly(p_dat, colors = ~color_tag) %>% 
+    #browser()
+    pl <- plotly::plot_ly(p_dat, type = NULL, colors = unique(p_dat$color_tag)) %>% 
       plotly::add_trace(x = ~time, y = ~value, type = 'scatter', 
                         mode = 'lines', 
                         linetype = ~source, color = ~location,
