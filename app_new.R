@@ -10,7 +10,6 @@ library(ggplot2)
 library(plotly)
 library(RColorBrewer)
 library(tm)
-library(randomcoloR)
 library(stringr)
 
 
@@ -626,9 +625,6 @@ server <- function(input, output, session) {
     #match colors to the order of locations plugged into the selectize input for state and world figures
     use_colors <<- add_palette[order(location_selector)]
     
-    if (current_tab == "county"){
-      test <<- location_selector
-    }
     
     pl <- plotly::plot_ly(p_dat) %>% 
       plotly::add_trace(x = ~time, y = ~value, type = 'scatter', 
