@@ -9,6 +9,7 @@ library(shinyWidgets)
 library(ggplot2)
 library(plotly)
 library(tm)
+library(colorspace)
 
 
 #################################
@@ -125,13 +126,6 @@ get_data <- function()
   world_popsize <-readRDS(here("data","world_popsize.rds"))
   county_popsize <- readRDS(here("data", "county_popsize.rds"))
   
-  #assign colors
-  statecolors <<- stats::setNames(
-    object = hcl(h=seq(1,360,length.out=nrow(us_popsize)),
-                 c=100,
-                 l=100), 
-    nm = us_popsize$location %>% unique()
-  ) 
   
   all_data = list() #will save and return all datasets as list
   
@@ -365,12 +359,12 @@ get_data <- function()
     mutate(location = paste0(county,'_',state))
   
   #reorder columns
-  county_dat <- county_dat[c("source","county","state", "location", "populationsize", "date","variable","value","state_abr")]
+  county_dat <- county_dat[c("source","county", "state", "location", "populationsize", "date","variable","value","state_abr")]
   
   #add static colors
-  us_dat <- make_colors(us_dat)
-  world_dat <- make_colors(world_dat)
-  county_dat <- make_colors(county_dat)
+  #us_dat <- make_colors(us_dat)
+  #world_dat <- make_colors(world_dat)
+  #county_dat <- make_colors(county_dat)
   
   
   #set negative values to zero
@@ -435,6 +429,8 @@ server <- function(input, output, session) {
   us_source_var = unique(us_dat$source)
   world_source_var = unique(world_dat$source)
   county_source_var = unique(county_dat$source)
+  
+  
   
   ################################################################################################
   #create the following UI elements on server and then add to UI sincc they depend on the variables above 
@@ -531,28 +527,30 @@ server <- function(input, output, session) {
     }
     
     
+    #get only the selected state for county, so we can do color assignment
     if (current_tab == "county")
     {
-      #add an additional line of filtering when using the county tab to prevent double stacking of data from counties that share the same name in multiple states
-      #sort remaining data as done for us and world plots
-      plot_dat <- county_dat %>% filter(state %in% input$state_selector_c) %>%
-        filter(location %in% location_selector) %>%      
-        filter(source %in% source_selector) %>%
-        group_by(source,location) %>%
-        arrange(date) %>%
-        ungroup()
-    }
+      plot_dat <- all_plot_dat %>% filter(state %in% input$state_selector_c) 
+    }    
     else
     {
-      #filter data based on user selections
-      #keep all outcomes/variables for now so we can do x-axis adjustment
-      #filtering of only the outcome to plot is done after x-scale adjustment
-      plot_dat <- all_plot_dat %>%   filter(location %in% location_selector) %>%      
+      plot_dat <- all_plot_dat
+    }
+    
+    #set colors before filtering out locations so they remain the same
+    plotcolors <<- stats::setNames(
+      object = colorspace::rainbow_hcl(length(unique(plot_dat$location)),start = 10, end = 360), 
+      nm = unique(plot_dat$location) %>% unique()
+    )
+    
+    #filter data based on user selections
+    #keep all outcomes/variables for now so we can do x-axis adjustment
+    #filtering of only the outcome to plot is done after x-scale adjustment
+    plot_dat <- all_plot_dat %>%   filter(location %in% location_selector) %>%      
         filter(source %in% source_selector) %>%
         group_by(source,location) %>%
         arrange(date) %>%
         ungroup()
-    }
     
     
     #adjust x-axis as needed 
@@ -619,13 +617,14 @@ server <- function(input, output, session) {
     linesize = 1.5
     ncols = max(3,length(unique(p_dat$location))) #number of colors for plotting
     
+    
     # create text to show in hover-over tooltip
     tooltip_text = paste(paste0("Location: ", p_dat$location), 
                          paste0(tool_tip[1], ": ", p_dat$date), 
                          paste0(tool_tip[ylabel+1],": ", outcome, sep ="\n")) 
    
     # make plot
-    pl <- plotly::plot_ly(p_dat, type = NULL, colors = ~statecolors) %>% 
+    pl <- plotly::plot_ly(p_dat, type = NULL, colors = ~plotcolors) %>% 
       plotly::add_trace(x = ~time, y = ~value, type = 'scatter', 
                         mode = 'lines', 
                         linetype = ~source, color = ~location,
@@ -636,7 +635,6 @@ server <- function(input, output, session) {
     
     # if requested by user, apply and show a smoothing function 
     if (show_smoother == "Yes")
-      #if (outname == "outcome" && show_smoother == "Yes")
     {
       if (any(location_selector %in% p_dat$location))
       {
@@ -648,7 +646,7 @@ server <- function(input, output, session) {
         
         pl <- pl %>% plotly::add_lines(x = ~time, y = ~smoother, 
                                        data = p_dat2, 
-                                       line = list( width = 2*linesize, color = ~color_tag),
+                                       line = list( width = 2*linesize, color = ~location),
                                        opacity=0.3,
                                        showlegend = FALSE) 
       }
@@ -665,7 +663,7 @@ server <- function(input, output, session) {
   ###########################################
   output$case_death_plot <- renderPlotly({
     pl <- NULL
-    if (!is.null(input$source_selector))
+    if (!is.null(input$source_selector) && input$current_tab == "us")
     {
       #create plot
       pl <- make_plotly(us_dat, input$state_selector, input$source_selector, input$case_death, input$daily_tot,
@@ -680,7 +678,7 @@ server <- function(input, output, session) {
   ###########################################
   output$testing_plot <- renderPlotly({
     pl <- NULL
-    if ('COVIDTracking' %in% input$source_selector)
+    if ('COVIDTracking' %in% input$source_selector && input$current_tab == "us")
     {
       pl <- make_plotly(us_dat, input$state_selector, input$source_selector, input$case_death, input$daily_tot,
                         input$xscale, input$yscale, input$absolute_scaled, input$x_limit, input$current_tab,
@@ -694,7 +692,7 @@ server <- function(input, output, session) {
   ###########################################
   output$testing_frac_plot <- renderPlotly({
     pl <- NULL
-    if ('COVIDTracking' %in% input$source_selector)
+    if ('COVIDTracking' %in% input$source_selector && input$current_tab == "us")
     {
       pl <- make_plotly(us_dat, input$state_selector, input$source_selector, input$case_death, input$daily_tot,
                         input$xscale, input$yscale, input$absolute_scaled, input$x_limit, input$current_tab,
@@ -709,7 +707,7 @@ server <- function(input, output, session) {
   ###########################################
   output$world_case_death_plot <- renderPlotly({
     pl <- NULL
-    if (!is.null(input$source_selector_w))
+    if (!is.null(input$source_selector_w) && input$current_tab == "world")
     {
       pl <- make_plotly(world_dat, input$country_selector, input$source_selector_w, input$case_death_w, input$daily_tot_w,
                         input$xscale_w, input$yscale_w, input$absolute_scaled_w, input$x_limit_w, input$current_tab,
@@ -723,7 +721,7 @@ server <- function(input, output, session) {
   ###########################################
   output$world_testing_plot <- renderPlotly({
     pl <- NULL
-    if ('OWID' %in% input$source_selector_w)
+    if ('OWID' %in% input$source_selector_w && input$current_tab == "world")
     {
       #create plot
       pl <- make_plotly(world_dat, input$country_selector, input$source_selector_w, input$case_death_w, input$daily_tot_w,
@@ -739,7 +737,7 @@ server <- function(input, output, session) {
   ###########################################
   output$world_testing_frac_plot <- renderPlotly({
     pl <- NULL
-    if ('OWID' %in% input$source_selector_w)
+    if ('OWID' %in% input$source_selector_w && input$current_tab == "world")
     {
       pl <- make_plotly(world_dat, input$country_selector, input$source_selector_w, input$case_death_w, input$daily_tot_w,
                         input$xscale_w, input$yscale_w, input$absolute_scaled_w, input$x_limit_w, input$current_tab,
@@ -753,16 +751,11 @@ server <- function(input, output, session) {
   ###########################################
   output$county_case_death_plot <- renderPlotly({
     #JHU data only
-    pl <- make_plotly(county_dat, input$county_selector, "JHU", input$case_death_c, input$daily_tot_c, "x_time", input$yscale_c, input$absolute_scaled_c, input$x_limit_c, input$current_tab, input$show_smoother_c, ylabel = 1, outtype = '')
-    
-    #this code is if we enable different sources for counties. currently disabled.
-    #pl <- NULL
-    #if (!is.null(input$source_selector_c))
-    #{
-    #this plot does not give the option to start at N cases/deaths, seems useless
-    #      pl <- make_plotly(county_dat, input$county_selector, input$source_selector_c, input$case_death_c, input$daily_tot_c, "x_time", input$yscale_c, input$absolute_scaled_c, input$x_limit_c, input$current_tab, input$show_smoother_c, ylabel = 1, outtype = '')
-    #}
-    
+    pl <- NULL
+    if (input$current_tab == "county")
+    {
+      pl <- make_plotly(county_dat, input$county_selector, "JHU", input$case_death_c, input$daily_tot_c, "x_time", input$yscale_c, input$absolute_scaled_c, input$x_limit_c, input$current_tab, input$show_smoother_c, ylabel = 1, outtype = '')
+    }
     return(pl)
   }) #end function making case/deaths plot
   
