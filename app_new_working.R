@@ -437,7 +437,7 @@ server <- function(input, output, session) {
   #those variables are only defined on server
   ################################################################################################
   output$state_selector = renderUI({
-    shinyWidgets::pickerInput("state_selector", "Select States (all US at top)", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("Georgia","California","Washington") )
+    shinyWidgets::pickerInput("state_selector", "Select States (all US at top)", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("Georgia","Texas","Arizona") )
   })
   output$source_selector = renderUI({
     shinyWidgets::pickerInput("source_selector", "Select Sources (see 'About' tab for details)", us_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("COVIDTracking") )
@@ -538,8 +538,9 @@ server <- function(input, output, session) {
     }
     
     #set colors before filtering out locations so they remain the same
+    n_colors <- length(unique(plot_dat$location))
     plotcolors <<- stats::setNames(
-      object = colorspace::rainbow_hcl(length(unique(plot_dat$location)),start = 10, end = 360), 
+      object = colorspace::rainbow_hcl(n_colors,start = 0, end = 360*(n_colors-1)/n_colors, alpha = 1, fixup = TRUE), 
       nm = unique(plot_dat$location) %>% unique()
     )
     
