@@ -538,9 +538,12 @@ server <- function(input, output, session) {
     }
     
     #set colors before filtering out locations so they remain the same
+    add_palette <- colorRampPalette(c("#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D", "#666666"))
     n_colors <- length(unique(plot_dat$location))
+    static_colors <- add_palette(n_colors)
     plotcolors <<- stats::setNames(
-      object = colorspace::rainbow_hcl(n_colors,start = 0, end = 360*(n_colors-1)/n_colors, alpha = 1, fixup = TRUE), 
+      object = static_colors,
+      #object = colorspace::rainbow_hcl(n_colors,start = 0, end = 360*(n_colors-1)/n_colors, alpha = 1, fixup = TRUE), 
       nm = unique(plot_dat$location) %>% unique()
     )
     
