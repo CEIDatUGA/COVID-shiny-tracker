@@ -8,8 +8,8 @@ library(shiny)
 library(shinyWidgets)
 library(ggplot2)
 library(plotly)
-library(RColorBrewer)
 library(tm)
+library(colorspace)
 
 
 #################################
@@ -41,9 +41,9 @@ clean_counties <- function(df,county_popsize){
 #function to add all US to data
 add_US <- function(df){
   df_new <- df %>% group_by(Date) %>% 
-                   summarize_if(is.numeric, sum, na.rm=TRUE) %>%
-                   mutate(Location = "US") %>%
-                   mutate(Population_Size = max(Population_Size))
+    summarize_if(is.numeric, sum, na.rm=TRUE) %>%
+    mutate(Location = "US") %>%
+    mutate(Population_Size = max(Population_Size))
   return(df_new)
 }
 
@@ -91,6 +91,20 @@ clean_world_jhu <- function(df, world_popsize){
   return(worldjhu)
 }
 
+#function to make static colors for datasets
+make_colors <- function(df){
+  #designate colors and list length 
+  location <- unique(df$location)
+  color_tag = hcl(h=seq(1,360,length.out=length(location)),c=100,l=100)
+  #make color dataframe
+  color_frame <- data.frame(location, color_tag)
+  #color_frame$color_tag <- as.character(as.factor(color_frame$color_tag))
+  #color_frame$location <- as.character(as.factor(color_frame$location))
+  #merge colors with tracker data by location
+  add_colors <- left_join(df, color_frame, by = "location")
+  return(add_colors)
+}
+
 #################################
 # Function to get and clean all data
 # for speed, we only get data from the online source if the data is old, otherwise we load locally
@@ -101,16 +115,17 @@ get_data <- function()
 {
   filename = here("data",paste0("clean_data_",Sys.Date(),'.rds')) #if the data file for today is here, load then return from function
   if (file.exists(filename)) {
-     all_data <- readRDS(file = filename)    
-     return(all_data)  
+    all_data <- readRDS(file = filename)    
+    return(all_data)  
   }
   #if data file is not here, go through all of the below
   
   #data for population size for each state/country so we can compute cases per 100K
   us_popsize <- readRDS(here("data","us_popsize.rds")) %>%
-                rename(state_abr = state, state = state_full, pop_size = total_pop)
+    rename(state_abr = state, state = state_full, pop_size = total_pop)
   world_popsize <-readRDS(here("data","world_popsize.rds"))
   county_popsize <- readRDS(here("data", "county_popsize.rds"))
+  
   
   all_data = list() #will save and return all datasets as list
   
@@ -141,9 +156,9 @@ get_data <- function()
   #add all US by summing over all variables
   #adding is not right approach for proportion test positive, so need to recompute
   all_us <- add_US(us_ct_clean) %>%
-            mutate(Daily_Positive_Prop = Daily_Test_Positive / Daily_Test_All) %>%
-            mutate(Total_Positive_Prop = Total_Test_Positive / Total_Test_All) 
-    
+    mutate(Daily_Positive_Prop = Daily_Test_Positive / Daily_Test_All) %>%
+    mutate(Total_Positive_Prop = Total_Test_Positive / Total_Test_All) 
+  
   #combine all US data with rest of data
   us_ct_clean = rbind(us_ct_clean,all_us)
   
@@ -206,7 +221,7 @@ get_data <- function()
   usafct_clean = rbind(usafct_clean,all_us)
   #reformat to long
   usafct_clean <- to_long(usafct_clean)
-
+  
   #################################
   # pull US data from JHU github and process
   #################################
@@ -242,11 +257,11 @@ get_data <- function()
   
   #pull state data and aggregate county values
   us_jhu_clean <- us_jhu_total %>% 
-                  select(-county_name) %>% 
-                  rename(Location = state) %>%
-                  group_by(Location, Date, Population_Size) %>% 
-                  summarise_if(is.numeric, sum, na.rm=TRUE) %>% 
-                  data.frame()
+    select(-county_name) %>% 
+    rename(Location = state) %>%
+    group_by(Location, Date, Population_Size) %>% 
+    summarise_if(is.numeric, sum, na.rm=TRUE) %>% 
+    data.frame()
   
   #add total US values
   all_us <- add_US(us_jhu_clean)
@@ -274,7 +289,7 @@ get_data <- function()
     rename(Date = date, Total_Deaths = deaths, Total_Cases = cases, Location = country, Population_Size = country_pop) 
   #reformat to long
   world_jhu_clean <- to_long(world_jhu_clean)
-
+  
   
   #################################
   # pull world data from OWID github and process
@@ -292,7 +307,7 @@ get_data <- function()
     select( - contains('thousand'), - contains('million'))
   #reformat to long
   world_owid_clean <- to_long(world_owid_clean)
-
+  
   #################################
   # combine all data 
   #################################
@@ -340,10 +355,17 @@ get_data <- function()
   #combine all county data from different sources
   #also do all variable/column names in lowercase
   county_dat <- county_jhu_clean %>%
-                rename(date = Date, location = county_name, populationsize = pop_size)
+    rename(date = Date, county = county_name, populationsize = pop_size) %>%
+    mutate(location = paste0(county,'_',state))
   
   #reorder columns
-  county_dat <- county_dat[c("source","location","state", "populationsize","date","variable","value","state_abr")]
+  county_dat <- county_dat[c("source","county", "state", "location", "populationsize", "date","variable","value","state_abr")]
+  
+  #add static colors
+  #us_dat <- make_colors(us_dat)
+  #world_dat <- make_colors(world_dat)
+  #county_dat <- make_colors(county_dat)
+  
   
   #set negative values to zero
   #Comment out the line below to keep negative values in the data for debugging
@@ -363,7 +385,7 @@ get_data <- function()
   #save the data
   saveRDS(all_data, filename)    
   return(all_data)
-
+  
 } # end the get-data function which pulls data from the various online sources and processes/saves  
 
 
@@ -372,7 +394,7 @@ get_data <- function()
 # Define server functions
 ###########################################
 server <- function(input, output, session) {
-
+  
   
   ###########################################
   # function that re-reads the data every so often
@@ -386,7 +408,7 @@ server <- function(input, output, session) {
                                           {
                                             get_data()
                                           } ) #end with-progress wrapper
-                 })   
+                           })   
   
   #read data is reactive, doesn't work for rest below 
   all_dat = isolate(all_data())
@@ -401,37 +423,39 @@ server <- function(input, output, session) {
   state_var = sort(unique(us_dat$location))  
   state_var <- c("US",state_var[!state_var=="US"]) #move US to front
   country_var = sort(unique(world_dat$location))
-  county_var = sort(unique(county_dat$location))
+  county_var = sort(unique(county_dat$county))
   state_var_county = sort(unique(county_dat$state))
   
   us_source_var = unique(us_dat$source)
   world_source_var = unique(world_dat$source)
   county_source_var = unique(county_dat$source)
   
+  
+  
   ################################################################################################
   #create the following UI elements on server and then add to UI sincc they depend on the variables above 
   #those variables are only defined on server
   ################################################################################################
   output$state_selector = renderUI({
-    shinyWidgets::pickerInput("state_selector", "Select States (all US at top)", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("Georgia","California","Washington") )
+    shinyWidgets::pickerInput("state_selector", "Select States (all US at top)", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("Georgia","Texas","Arizona") )
   })
   output$source_selector = renderUI({
     shinyWidgets::pickerInput("source_selector", "Select Sources (see 'About' tab for details)", us_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("COVIDTracking") )
   })
   output$state_selector_c = renderUI({
-                      shinyWidgets::pickerInput("state_selector_c", "Select state", state_var_county,  multiple = FALSE, options = list(`actions-box` = TRUE), selected = c("Georgia"))
+    shinyWidgets::pickerInput("state_selector_c", "Select state", state_var_county,  multiple = FALSE, options = list(`actions-box` = TRUE), selected = c("Georgia"))
   })
   output$county_selector = renderUI({
-     shinyWidgets::pickerInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = county_var[1])
+    shinyWidgets::pickerInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = county_var[1])
   })
   output$country_selector = renderUI({
-      shinyWidgets::pickerInput("country_selector", "Select countries", country_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("US", "United Kingdom", "Germany"))
+    shinyWidgets::pickerInput("country_selector", "Select countries", country_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("US", "United Kingdom", "Germany"))
   })
   output$source_selector_w = renderUI({
-     shinyWidgets::pickerInput("source_selector_w", "Select Sources (see 'About' tab for details)", world_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") )
+    shinyWidgets::pickerInput("source_selector_w", "Select Sources (see 'About' tab for details)", world_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") )
   })
   
-      
+  
   #watch the choice for the x-scale and choose what to show underneath accordingly
   observeEvent(input$xscale,
                {
@@ -474,22 +498,22 @@ server <- function(input, output, session) {
   #watch state_selector_c to reduce the picker options in the county dropdown limited to those within the selected state(s)
   observeEvent(input$state_selector_c,
                {
-                  #redesignate county_dat to match the state selector input
-                   county_dat_sub <- county_dat %>% filter(state %in% input$state_selector_c)
-                   county_var_sub = sort(unique(county_dat_sub$location))
-                   shinyWidgets::updatePickerInput(session, "county_selector", "Select counties", county_var_sub, selected = county_var_sub[1])
-             })
+                 #redesignate county_dat to match the state selector input
+                 county_dat_sub <- county_dat %>% filter(state %in% input$state_selector_c)
+                 county_var_sub = sort(unique(county_dat_sub$location))
+                 shinyWidgets::updatePickerInput(session, "county_selector", "Select counties", county_var_sub, selected = county_var_sub[1])
+               })
   
-
+  
   ###########################################
   # function that takes data generated by above function and makes plots
   # uses plotly
   ###########################################
   make_plotly <- function(all_plot_dat, location_selector, source_selector,case_death, daily_tot,
-                              xscale, yscale, absolute_scaled, x_limit, current_tab,  
-                              show_smoother, ylabel, outtype)
+                          xscale, yscale, absolute_scaled, x_limit, current_tab,  
+                          show_smoother, ylabel, outtype)
   {
-
+    
     #outcome to plot/process for non-test
     outcome = paste(daily_tot,case_death,sep='_') #make string from UI inputs that correspond with variable names
     
@@ -501,31 +525,38 @@ server <- function(input, output, session) {
     {
       outcome = paste(daily_tot,outtype,sep="_") 
     }
-
     
+    
+    #get only the selected state for county, so we can do color assignment
     if (current_tab == "county")
     {
-      #add an additional line of filtering when using the county tab to prevent double stacking of data from counties that share the same name in multiple states
-      #sort remaining data as done for us and world plots
-      plot_dat <- county_dat %>% filter(state %in% input$state_selector_c) %>%
-                                   filter(location %in% location_selector) %>%      
-                                   filter(source %in% source_selector) %>%
-                                   group_by(source,location) %>%
-                                   arrange(date) %>%
-                                   ungroup()
-    }
+      plot_dat <- all_plot_dat %>% filter(state %in% input$state_selector_c) 
+    }    
     else
     {
-      #filter data based on user selections
-      #keep all outcomes/variables for now so we can do x-axis adjustment
-      #filtering of only the outcome to plot is done after x-scale adjustment
-      plot_dat <- all_plot_dat %>%   filter(location %in% location_selector) %>%      
-                                     filter(source %in% source_selector) %>%
-                                     group_by(source,location) %>%
-                                     arrange(date) %>%
-                                     ungroup()
+      plot_dat <- all_plot_dat
     }
-
+    
+    #set colors before filtering out locations so they remain the same
+    set.seed(1234)#keep the colors the same
+    n_colors <- length(unique(plot_dat$location))
+    add_palette <- colorRampPalette(c("#1B9E77", "#D95F02", "#7570B3", "#E7298A", "#66A61E", "#E6AB02", "#A6761D", "#666666"))
+    static_colors <- add_palette(n_colors) %>% sample()
+    plotcolors <<- stats::setNames(
+      object = static_colors,
+      #object = colorspace::rainbow_hcl(n_colors,start = 0, end = 360*(n_colors-1)/n_colors, alpha = 1, fixup = TRUE), 
+      nm = unique(plot_dat$location) %>% unique()
+    )
+    
+    #filter data based on user selections
+    #keep all outcomes/variables for now so we can do x-axis adjustment
+    #filtering of only the outcome to plot is done after x-scale adjustment
+    plot_dat <- all_plot_dat %>%   filter(location %in% location_selector) %>%      
+        filter(source %in% source_selector) %>%
+        group_by(source,location) %>%
+        arrange(date) %>%
+        ungroup()
+    
     
     #adjust x-axis as needed 
     if (xscale == 'x_count')
@@ -539,19 +570,19 @@ server <- function(input, output, session) {
         summarize(start_date = first(date))   #get first date for each state after filtering. for this to work right, the data needs to be sorted by date for each source/location combination
       
       plot_dat <-  plot_dat %>% left_join(start_dates, by = c("source", "location")) %>% #add start dates to data
-                   filter(variable %in% outcome) %>% #retain only outcome variable
-                   filter(date >= start_date)  %>%      
-                   mutate(time = as.numeric(date)) %>%
-                   group_by(source, location) %>% 
-                   mutate(time = time - min(time)) %>%
-                   ungroup()
+        filter(variable %in% outcome) %>% #retain only outcome variable
+        filter(date >= start_date)  %>%      
+        mutate(time = as.numeric(date)) %>%
+        group_by(source, location) %>% 
+        mutate(time = time - min(time)) %>%
+        ungroup()
     }
     else
     {
       #filter by date limit
       plot_dat <- plot_dat %>% mutate(time = date) %>%
-                  filter(variable %in% outcome) %>%
-                  filter(date >= x_limit) 
+        filter(variable %in% outcome) %>%
+        filter(date >= x_limit) 
     }
     
     
@@ -563,7 +594,7 @@ server <- function(input, output, session) {
     tool_tip <- c("Date", "Cases", "Tests", "Positive Test Proportion")
     tool_tip[2] <- case_death #fill that automatically with either Case/Hosp/Death
     
-       
+    
     #if we want scaling by 100K, do extra scaling 
     # don't apply to test proportion
     if ((absolute_scaled == 'scaled') && (outtype != "Positive_Prop"))
@@ -572,9 +603,9 @@ server <- function(input, output, session) {
       y_labels[1] <- paste0(y_labels[1], " per 100K")
       y_labels[2] <- paste0(y_labels[2], " per 100K")
     } #end scaling function
-     
     
-
+    
+    
     p_dat <- plot_dat
     #the US test plots can only be created using the COVIDtracking data
     if (current_tab == "us" && (outtype == "Test_All" || outtype == "Positive_Prop")) 
@@ -587,28 +618,28 @@ server <- function(input, output, session) {
     {
       p_dat <- plot_dat %>% filter(source == "OWID")
     }
-       
+    
     linesize = 1.5
     ncols = max(3,length(unique(p_dat$location))) #number of colors for plotting
+    
     
     # create text to show in hover-over tooltip
     tooltip_text = paste(paste0("Location: ", p_dat$location), 
                          paste0(tool_tip[1], ": ", p_dat$date), 
                          paste0(tool_tip[ylabel+1],": ", outcome, sep ="\n")) 
-    
+   
     # make plot
-    pl <- plotly::plot_ly(p_dat) %>% 
-          plotly::add_trace(x = ~time, y = ~value, type = 'scatter', 
-                                 mode = 'lines+markers', 
-                                 linetype = ~source, symbol = ~location,
-                                 line = list(width = linesize), text = tooltip_text, 
-                                 color = ~location, colors = brewer.pal(ncols, "Dark2")) %>%
-                          layout(yaxis = list(title=y_labels[ylabel], type = yscale, size = 18)) %>%
-                          layout(legend = list(orientation = "h", x = 0.2, y = -0.3))
-
+    pl <- plotly::plot_ly(p_dat, type = NULL, colors = ~plotcolors) %>% 
+      plotly::add_trace(x = ~time, y = ~value, type = 'scatter', 
+                        mode = 'lines', 
+                        linetype = ~source, color = ~location,
+                        line = list(width = linesize), 
+                        text = tooltip_text) %>%
+      layout(yaxis = list(title=y_labels[ylabel], type = yscale, size = 18)) %>%
+      layout(legend = list(orientation = "h", x = 0.2, y = -0.3))
+    
     # if requested by user, apply and show a smoothing function 
     if (show_smoother == "Yes")
-    #if (outname == "outcome" && show_smoother == "Yes")
     {
       if (any(location_selector %in% p_dat$location))
       {
@@ -619,15 +650,15 @@ server <- function(input, output, session) {
           ungroup()
         
         pl <- pl %>% plotly::add_lines(x = ~time, y = ~smoother, 
-                                       color = ~location, data = p_dat2, 
+                                       data = p_dat2, colors = ~plotcolors, color = ~location,
                                        line = list( width = 2*linesize),
                                        opacity=0.3,
                                        showlegend = FALSE) 
-     }
-     else
-     {
+      }
+      else
+      {
         stop(safeError("Please select a different data source or location. The selected location(s) is not present in the chosen source"))
-     }
+      }
     } #end smoother if statement
     return(pl)
   }
@@ -637,22 +668,22 @@ server <- function(input, output, session) {
   ###########################################
   output$case_death_plot <- renderPlotly({
     pl <- NULL
-    if (!is.null(input$source_selector))
+    if (!is.null(input$source_selector) && input$current_tab == "us")
     {
-    #create plot
-    pl <- make_plotly(us_dat, input$state_selector, input$source_selector, input$case_death, input$daily_tot,
-                              input$xscale, input$yscale, input$absolute_scaled, input$x_limit, input$current_tab,
-                              input$show_smoother, ylabel = 1, outtype = '')
+      #create plot
+      pl <- make_plotly(us_dat, input$state_selector, input$source_selector, input$case_death, input$daily_tot,
+                        input$xscale, input$yscale, input$absolute_scaled, input$x_limit, input$current_tab,
+                        input$show_smoother, ylabel = 1, outtype = '')
     }
     return(pl)
   }) #end function making case/deaths plot
-
+  
   ###########################################
   #function that makes testing plot for US tab
   ###########################################
   output$testing_plot <- renderPlotly({
     pl <- NULL
-    if ('COVIDTracking' %in% input$source_selector)
+    if ('COVIDTracking' %in% input$source_selector && input$current_tab == "us")
     {
       pl <- make_plotly(us_dat, input$state_selector, input$source_selector, input$case_death, input$daily_tot,
                         input$xscale, input$yscale, input$absolute_scaled, input$x_limit, input$current_tab,
@@ -665,23 +696,23 @@ server <- function(input, output, session) {
   #function that makes testing positive fraction plot for US tab
   ###########################################
   output$testing_frac_plot <- renderPlotly({
-      pl <- NULL
-      if ('COVIDTracking' %in% input$source_selector)
-      {
-        pl <- make_plotly(us_dat, input$state_selector, input$source_selector, input$case_death, input$daily_tot,
-                          input$xscale, input$yscale, input$absolute_scaled, input$x_limit, input$current_tab,
-                          input$show_smoother, ylabel = 3, outtype = 'Positive_Prop')
-        
-      }
-      return(pl)
-      }) #end function making testing plot
-
+    pl <- NULL
+    if ('COVIDTracking' %in% input$source_selector && input$current_tab == "us")
+    {
+      pl <- make_plotly(us_dat, input$state_selector, input$source_selector, input$case_death, input$daily_tot,
+                        input$xscale, input$yscale, input$absolute_scaled, input$x_limit, input$current_tab,
+                        input$show_smoother, ylabel = 3, outtype = 'Positive_Prop')
+      
+    }
+    return(pl)
+  }) #end function making testing plot
+  
   ###########################################
   #function that makes case/death  for world tab
   ###########################################
   output$world_case_death_plot <- renderPlotly({
     pl <- NULL
-    if (!is.null(input$source_selector_w))
+    if (!is.null(input$source_selector_w) && input$current_tab == "world")
     {
       pl <- make_plotly(world_dat, input$country_selector, input$source_selector_w, input$case_death_w, input$daily_tot_w,
                         input$xscale_w, input$yscale_w, input$absolute_scaled_w, input$x_limit_w, input$current_tab,
@@ -695,7 +726,7 @@ server <- function(input, output, session) {
   ###########################################
   output$world_testing_plot <- renderPlotly({
     pl <- NULL
-    if ('OWID' %in% input$source_selector_w)
+    if ('OWID' %in% input$source_selector_w && input$current_tab == "world")
     {
       #create plot
       pl <- make_plotly(world_dat, input$country_selector, input$source_selector_w, input$case_death_w, input$daily_tot_w,
@@ -711,7 +742,7 @@ server <- function(input, output, session) {
   ###########################################
   output$world_testing_frac_plot <- renderPlotly({
     pl <- NULL
-    if ('OWID' %in% input$source_selector_w)
+    if ('OWID' %in% input$source_selector_w && input$current_tab == "world")
     {
       pl <- make_plotly(world_dat, input$country_selector, input$source_selector_w, input$case_death_w, input$daily_tot_w,
                         input$xscale_w, input$yscale_w, input$absolute_scaled_w, input$x_limit_w, input$current_tab,
@@ -719,22 +750,17 @@ server <- function(input, output, session) {
     }
     return(pl)
   }) #end function making testing plot
-
+  
   ###########################################
   #function that makes case/death  for county tab
   ###########################################
   output$county_case_death_plot <- renderPlotly({
     #JHU data only
-    pl <- make_plotly(county_dat, input$county_selector, "JHU", input$case_death_c, input$daily_tot_c, "x_time", input$yscale_c, input$absolute_scaled_c, input$x_limit_c, input$current_tab, input$show_smoother_c, ylabel = 1, outtype = '')
-    
-    #this code is if we enable different sources for counties. currently disabled.
-        #pl <- NULL
-    #if (!is.null(input$source_selector_c))
-    #{
-      #this plot does not give the option to start at N cases/deaths, seems useless
-#      pl <- make_plotly(county_dat, input$county_selector, input$source_selector_c, input$case_death_c, input$daily_tot_c, "x_time", input$yscale_c, input$absolute_scaled_c, input$x_limit_c, input$current_tab, input$show_smoother_c, ylabel = 1, outtype = '')
-    #}
-    
+    pl <- NULL
+    if (input$current_tab == "county")
+    {
+      pl <- make_plotly(county_dat, input$county_selector, "JHU", input$case_death_c, input$daily_tot_c, "x_time", input$yscale_c, input$absolute_scaled_c, input$x_limit_c, input$current_tab, input$show_smoother_c, ylabel = 1, outtype = '')
+    }
     return(pl)
   }) #end function making case/deaths plot
   
