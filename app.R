@@ -18,7 +18,7 @@ library(colorspace)
 
 #starting date for date slider and default starting date to show
 mindate = as.Date("2020-02-01","%Y-%m-%d")
-defaultdate = as.Date("2020-03-01","%Y-%m-%d")
+defaultdate = as.Date("2020-05-01","%Y-%m-%d")
 
 #################################
 # make functions
