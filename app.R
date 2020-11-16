@@ -18,7 +18,7 @@ library(colorspace)
 
 #starting date for date slider and default starting date to show
 mindate = as.Date("2020-02-01","%Y-%m-%d")
-defaultdate = as.Date("2020-05-01","%Y-%m-%d")
+defaultdate = as.Date("2020-08-01","%Y-%m-%d")
 
 #################################
 # make functions
@@ -299,7 +299,7 @@ get_data <- function()
   world_owid_clean <- owid_data %>% dplyr::select(-tests_units, -iso_code, -continent) %>%
     rename(Total_Cases = total_cases, Total_Deaths = total_deaths, Daily_Cases = new_cases, Daily_Deaths = new_deaths, Location = location, Date = date, Daily_Test_All = new_tests, Total_Test_All = total_tests) %>% 
     mutate(Population_Size = Total_Cases / total_cases_per_million * 1000000) %>% #back-calculate population size
-    mutate(Location = recode(Location, "United States" = "US")) %>%
+    mutate(Location = dplyr::recode(Location, "United States" = "US")) %>%
     mutate(Daily_Test_Positive = Daily_Cases ) %>% #assuming new cases means new positive tests
     mutate(Total_Test_Positive = Total_Cases ) %>%
     mutate(Daily_Positive_Prop = Daily_Test_Positive / Daily_Test_All) %>%
@@ -449,7 +449,7 @@ server <- function(input, output, session) {
     shinyWidgets::pickerInput("county_selector", "Select counties", county_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = county_var[1])
   })
   output$country_selector = renderUI({
-    shinyWidgets::pickerInput("country_selector", "Select countries", country_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("US", "United Kingdom", "Germany"))
+    shinyWidgets::pickerInput("country_selector", "Select countries", country_var,  multiple = TRUE, options = list(`actions-box` = TRUE), selected = c("US", "India", "Brazil"))
   })
   output$source_selector_w = renderUI({
     shinyWidgets::pickerInput("source_selector_w", "Select Sources (see 'About' tab for details)", world_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("JHU") )
