@@ -296,7 +296,7 @@ get_data <- function()
   #################################
   message('starting OWID')
   owid_data <- readr::read_csv("https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/owid-covid-data.csv")
-  world_owid_clean <- owid_data %>% dplyr::select(-tests_units, -iso_code, -continent) %>%
+  world_owid_clean <<- owid_data %>% dplyr::select(total_cases, total_deaths, new_cases, new_deaths, location, date, new_tests, total_tests, total_cases_per_million) %>%
     rename(Total_Cases = total_cases, Total_Deaths = total_deaths, Daily_Cases = new_cases, Daily_Deaths = new_deaths, Location = location, Date = date, Daily_Test_All = new_tests, Total_Test_All = total_tests) %>% 
     mutate(Population_Size = Total_Cases / total_cases_per_million * 1000000) %>% #back-calculate population size
     mutate(Location = dplyr::recode(Location, "United States" = "US")) %>%
