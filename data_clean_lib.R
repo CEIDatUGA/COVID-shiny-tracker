@@ -92,10 +92,10 @@ make_colors <- function(df){
 #################################
 
 # to ensure data gets refreshed on server, we need this
-get_data <- function()
+get_data <- function(check_for_data = T)
 {
   filename = here("data",paste0("clean_data_",Sys.Date(),'.rds')) #if the data file for today is here, load then return from function
-  if (file.exists(filename)) {
+  if (file.exists(filename) & check_for_data) {
     all_data <- readRDS(file = filename)    
     return(all_data)  
   }
@@ -362,6 +362,23 @@ get_data <- function()
   all_data$county_dat = county_dat
   
   message('Data cleaning done.')
+  
+  #compare all_data to previous data file
+  if(file.exists(filename)){
+    if(identical(all_data, readRDS(filename))) {
+      
+      message('Data is unchanged.')
+      return(NULL)
+      
+    } else {
+      
+      message('Data has changed. Moving previous data file.')
+      Sys.time() %>% 
+        format(format = "%H:%M") %>% 
+        paste0(tools::file_path_sans_ext(filename), '-', ., '.rds') %>% 
+        file.rename(filename, .)
+    }
+  }
   
   #save the data
   saveRDS(all_data, filename)    

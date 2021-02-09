@@ -22,5 +22,5 @@ source('data_clean_lib.R')
 mindate = as.Date("2020-02-01","%Y-%m-%d")
 defaultdate = as.Date("2020-08-01","%Y-%m-%d")
 
-get_data()
+get_data(check_for_data = F)
 
