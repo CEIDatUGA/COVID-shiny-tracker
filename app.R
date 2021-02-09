@@ -19,6 +19,7 @@ library(colorspace)
 #starting date for date slider and default starting date to show
 mindate = as.Date("2020-02-01","%Y-%m-%d")
 defaultdate = as.Date("2020-08-01","%Y-%m-%d")
+day_before_yesterday <<- as.Date(Sys.Date()-2)
 
 #################################
 # make functions
@@ -120,6 +121,13 @@ get_data <- function()
   }
   #if data file is not here, go through all of the below
   
+  #************************************************NEW****************************************************
+  #need to load old data first to add to it
+  find_old <- file.info(list.files("./data", full.names = T)) #finds file info from all of the most recent data files
+  newest_file <<- rownames(find_old)[which.max(find_old$mtime)] #identifies the most recent data file
+  old_data <<- readRDS(newest_file)
+  #*******************************************************************************************************
+  
   #data for population size for each state/country so we can compute cases per 100K
   us_popsize <- readRDS(here("data","us_popsize.rds")) %>%
     rename(state_abr = state, state = state_full, pop_size = total_pop)
@@ -136,6 +144,7 @@ get_data <- function()
   us_ct_data <- read_csv("https://covidtracking.com/api/v1/states/daily.csv")
   us_ct_clean <- us_ct_data %>% dplyr::select(c(date,state,positive,negative,total,hospitalized,death)) %>%
     mutate(date = as.Date(as.character(date),format="%Y%m%d")) %>% 
+    filter(date >= day_before_yesterday) %>% #pull all data newer than the 
     group_by(state) %>% 
     arrange(date) %>%
     mutate(Daily_Test_Positive = c(0,diff(positive))) %>% 
@@ -160,18 +169,19 @@ get_data <- function()
     mutate(Total_Positive_Prop = Total_Test_Positive / Total_Test_All) 
   
   #combine all US data with rest of data
-  us_ct_clean = rbind(us_ct_clean,all_us)
+  us_ct_clean <- rbind(us_ct_clean,all_us)
   
   #reformat to long
   us_ct_clean <-  to_long(us_ct_clean)
   us_ct_clean$value[!is.finite(us_ct_clean$value)] <- NA
-  us_ct_clean <- na.omit(us_ct_clean)
+  us_ct_clean <<- na.omit(us_ct_clean)
   
   #################################
   # pull state level data from NYT and process
   #################################
   print('starting NYTimes')
-  us_nyt_data <- readr::read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv")
+  us_nyt_data <- readr::read_csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv") %>%
+    filter(date >= day_before_yesterday)
   us_nyt_clean <- us_nyt_data %>% dplyr::select(c(date,state,cases,deaths)) %>%
     group_by(state) %>% 
     arrange(date) %>%
@@ -188,39 +198,45 @@ get_data <- function()
   #reformat to long
   us_nyt_clean <- to_long(us_nyt_clean)
   
-  #################################
-  # pull state level data from USAFacts and process
-  #################################
-  print('starting USAFacts')
-  usafct_case_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_confirmed_usafacts.csv")
-  usafct_death_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_deaths_usafacts.csv")
-  
-  state_df = usafct_case_data %>% 
-    distinct(stateFIPS, .keep_all = TRUE) %>% 
-    select(State,stateFIPS)
-  
-  usafct_case_clean <- clean_usafacts_p1(usafct_case_data, state_df) %>%
-    tidyr::pivot_longer(-State, names_to = "Date", values_to = "Total_Cases") %>%
-    clean_usafacts_p2(us_popsize) %>%
-    group_by(Location) %>% arrange(Date) %>%
-    mutate(Daily_Cases = c(0,diff(Total_Cases)))
-  
-  usafct_death_clean <- clean_usafacts_p1(usafct_death_data, state_df) %>%  
-    tidyr::pivot_longer(-State, names_to = "Date", values_to = "Total_Deaths") %>%
-    clean_usafacts_p2(us_popsize) %>%
-    group_by(Location) %>% arrange(Date) %>%
-    mutate(Daily_Deaths = c(0,diff(Total_Deaths)))
-  
-  usafct_clean <- left_join(usafct_case_clean, usafct_death_clean) %>%
-    group_by(Location) %>% 
-    arrange(Date)  %>%
-    ungroup()
-  
-  #add all US by summing over all variables
-  all_us <- add_US(usafct_clean)
-  usafct_clean = rbind(usafct_clean,all_us)
-  #reformat to long
-  usafct_clean <- to_long(usafct_clean)
+  # #################################
+  # # pull state level data from USAFacts and process
+  # #################################
+  # print('starting USAFacts')
+  # usafct_case_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_confirmed_usafacts.csv")
+  # usafct_death_data <- readr::read_csv("https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_deaths_usafacts.csv")
+  # 
+  # state_df = usafct_case_data %>% 
+  #   distinct(stateFIPS, .keep_all = TRUE) %>% 
+  #   select(State,stateFIPS)
+  # 
+  # usafct_case_clean <- clean_usafacts_p1(usafct_case_data, state_df) %>%
+  #   select(-stateFIPS) %>%
+  #   tidyr::pivot_longer(-State, names_to = "Date", values_to = "Total_Cases") %>%
+  #   mutate(Date = as.Date(as.character(Date),format="%m/%d/%y")) %>%
+  #   filter(Date >= day_before_yesterday) %>%
+  #   clean_usafacts_p2(us_popsize) %>%
+  #   group_by(Location) %>% arrange(Date) %>%
+  #   mutate(Daily_Cases = c(0,diff(Total_Cases)))
+  # 
+  # usafct_death_clean <- clean_usafacts_p1(usafct_death_data, state_df) %>%  
+  #   select(-stateFIPS) %>%
+  #   tidyr::pivot_longer(-State, names_to = "Date", values_to = "Total_Deaths") %>%
+  #   mutate(Date = as.Date(as.character(Date),format="%m/%d/%y")) %>%
+  #   filter(Date >= day_before_yesterday) %>%
+  #   clean_usafacts_p2(us_popsize) %>%
+  #   group_by(Location) %>% arrange(Date) %>%
+  #   mutate(Daily_Deaths = c(0,diff(Total_Deaths)))
+  # 
+  # usafct_clean <- left_join(usafct_case_clean, usafct_death_clean) %>%
+  #   group_by(Location) %>% 
+  #   arrange(Date)  %>%
+  #   ungroup()
+  # 
+  # #add all US by summing over all variables
+  # all_us <- add_US(usafct_clean)
+  # usafct_clean = rbind(usafct_clean,all_us)
+  # #reformat to long
+  # usafct_clean <- to_long(usafct_clean)
   
   #################################
   # pull US data from JHU github and process
@@ -231,15 +247,18 @@ get_data <- function()
   # Clean cases
   us_jhu_cases_clean <- clean_us_jhu(us_jhu_cases) %>%
     tidyr::pivot_longer(cols = c(-state, -FIPS, -Admin2), names_to = "Date", values_to = "Cases") %>%
-    select(-FIPS)
+    select(-FIPS) %>%
+    mutate(Date = as.Date(as.character(Date),format="%m/%d/%y")) %>%
+    filter(Date >= day_before_yesterday) 
   # Clean deaths
   us_jhu_deaths_clean <-clean_us_jhu(us_jhu_deaths) %>% 
     tidyr::pivot_longer(cols = c(-state, -FIPS, -Admin2), names_to = "Date", values_to = "Deaths") %>%
-    select(-FIPS)
+    select(-FIPS) %>%
+    mutate(Date = as.Date(as.character(Date),format="%m/%d/%y")) %>%
+    filter(Date >= day_before_yesterday) 
   #combine cases and deaths
   us_jhu_combined <- inner_join(us_jhu_cases_clean, us_jhu_deaths_clean)
   us_jhu_total <- inner_join(us_jhu_combined, us_popsize) %>%
-    mutate(Date = as.Date(as.character(Date),format="%m/%d/%y")) %>%
     group_by(state, Admin2) %>% arrange(Date) %>%
     mutate(Daily_Cases = c(0,diff(Cases))) %>%
     mutate(Daily_Deaths = c(0,diff(Deaths))) %>% 
@@ -282,6 +301,7 @@ get_data <- function()
   # join the data
   world_jhu_clean <- inner_join(world_cases, world_deaths) %>% 
     mutate(date = as.Date(as.character(date),format="%m/%d/%y")) %>%
+    filter(date >= day_before_yesterday) %>%
     group_by(country) %>% arrange(date) %>%
     mutate(Daily_Cases = c(0,diff(cases))) %>%
     mutate(Daily_Deaths = c(0,diff(deaths))) %>%
@@ -295,8 +315,10 @@ get_data <- function()
   # pull world data from OWID github and process
   #################################
   message('starting OWID')
-  owid_data <- readr::read_csv("https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/owid-covid-data.csv")
-  world_owid_clean <<- owid_data %>% dplyr::select(total_cases, total_deaths, new_cases, new_deaths, location, date, new_tests, total_tests, total_cases_per_million) %>%
+  owid_data <- readr::read_csv("https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/owid-covid-data.csv", col_types = 
+                               cols_only(date = col_date(), location = col_character(), total_cases = col_number(), total_deaths = col_number(), new_cases = col_number(), new_deaths = col_number(), new_tests = col_number(), total_tests = col_number(), total_cases_per_million = col_number())) %>%
+  filter(date >= day_before_yesterday)
+  world_owid_clean <- owid_data %>% dplyr::select(total_cases, total_deaths, new_cases, new_deaths, location, date, new_tests, total_tests, total_cases_per_million) %>%
     rename(Total_Cases = total_cases, Total_Deaths = total_deaths, Daily_Cases = new_cases, Daily_Deaths = new_deaths, Location = location, Date = date, Daily_Test_All = new_tests, Total_Test_All = total_tests) %>% 
     mutate(Population_Size = Total_Cases / total_cases_per_million * 1000000) %>% #back-calculate population size
     mutate(Location = dplyr::recode(Location, "United States" = "US")) %>%
@@ -315,16 +337,18 @@ get_data <- function()
   message('starting state/county data combining')
   
   # give each US dataset a source label
-  us_source_var = c("COVIDTracking","NYTimes","JHU","USAFacts")
+  #us_source_var = c("COVIDTracking","NYTimes","JHU","USAFacts")
+  us_source_var = c("COVIDTracking","NYTimes","JHU")
   
   us_ct_clean$source = us_source_var[1]
   us_nyt_clean$source = us_source_var[2]
   us_jhu_clean$source = us_source_var[3]
-  usafct_clean$source = us_source_var[4]
+  #usafct_clean$source = us_source_var[4]
   
   #combine all US data from different sources
   #also do all variable/column names in lowercase
-  us_dat <- rbind(us_ct_clean, us_nyt_clean, us_jhu_clean, usafct_clean) 
+  #us_dat <- rbind(us_ct_clean, us_nyt_clean, us_jhu_clean, usafct_clean) 
+  us_dat <- rbind(us_ct_clean, us_nyt_clean, us_jhu_clean) 
   us_dat <- us_dat %>% rename(date = Date, location = Location, populationsize = Population_Size)
   
   #reorder columns
@@ -348,7 +372,8 @@ get_data <- function()
   message('starting county data combining')
   
   # give each county dataset a source label
-  county_source_var = c("JHU", "USAFacts", "NYTimes")
+  #county_source_var = c("JHU", "USAFacts", "NYTimes")
+  county_source_var = c("JHU", "NYTimes")
   
   county_jhu_clean$source = county_source_var[1]
   
@@ -381,6 +406,16 @@ get_data <- function()
   all_data$county_dat = county_dat
   
   message('Data cleaning done.')
+  
+  #join old and new data
+  us_dat_join <<- left_join(old_data$us_dat, all_data$us_dat)
+  world_dat_join <<- left_join(old_data$world_dat, all_data$world_dat)
+  county_dat_join <<- left_join(old_data$county_dat, all_data$county_dat)
+  
+  #remake the list 
+  all_data$us_dat = us_dat_join
+  all_data$world_dat = world_dat_join
+  all_data$county_dat = county_dat_join
   
   #save the data
   saveRDS(all_data, filename)    
@@ -437,7 +472,7 @@ server <- function(input, output, session) {
   #those variables are only defined on server
   ################################################################################################
   output$state_selector = renderUI({
-    shinyWidgets::pickerInput("state_selector", "Select States (all US at top)", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("Georgia","Texas","Arizona") )
+    shinyWidgets::pickerInput("state_selector", "Select States (all US at top)", state_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("Georgia", "Arizona", "California") )
   })
   output$source_selector = renderUI({
     shinyWidgets::pickerInput("source_selector", "Select Sources (see 'About' tab for details)", us_source_var, multiple = TRUE,options = list(`actions-box` = TRUE), selected = c("COVIDTracking") )
